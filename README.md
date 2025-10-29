@@ -150,6 +150,32 @@ The extension includes built-in support for:
 - `Net`, `Http`, `IO`, `File`, `Socket`
 - `Promise`, `CompletableFuture`
 
+### Built-in Class Methods
+
+**String Methods:**
+- `length()`, `isEmpty()`, `charAt(index)`, `indexOf(substring)`
+- `substring(start, end?)`, `toUpperCase()`, `toLowerCase()`, `trim()`
+- `startsWith(prefix)`, `endsWith(suffix)`, `contains(substring)`
+- `replace(old, new)`, `split(delimiter)`, `repeat(count)`
+
+**Array Methods:**
+- `length()`, `isEmpty()`, `add(element)`, `push(element)`, `pop()`, `shift()`, `unshift(element)`
+- `get(index)`, `set(index, value)`, `reverse()`, `sort()`, `clear()`
+- `contains(element)`, `indexOf(element)`, `concat(other)`, `slice(start, end?)`
+- `join(separator?)`, `map(fn)`, `filter(fn)`, `reduce(fn, initial?)`
+- `forEach(fn)`, `find(fn)`, `findIndex(fn)`, `every(fn)`, `some(fn)`
+
+**Map Methods:**
+- `get(key, default?)`, `set(key, value)`, `put(key, value)`
+- `has(key)`, `hasKey(key)`, `remove(key)`, `delete(key)`
+- `clear()`, `size()`, `length()`, `isEmpty()`
+- `keys()`, `values()`, `entries()`
+
+**Set Methods:**
+- `add(element)`, `remove(element)`, `delete(element)`
+- `has(element)`, `contains(element)`, `size()`, `length()`
+- `isEmpty()`, `clear()`, `toArray()`
+
 ## Usage
 
 1. Install the extension

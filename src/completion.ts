@@ -18,13 +18,19 @@ interface BuiltinPackages {
             functions?: Array<{
                 name: string;
                 returnType: string;
-                parameters: Array<{ name: string; type: string }>;
+                parameters: Array<{ name: string; type: string; optional?: boolean }>;
                 description: string;
             }>;
             constants?: Array<{
                 name: string;
                 type: string;
                 value: any;
+                description: string;
+            }>;
+            methods?: Array<{
+                name: string;
+                returnType: string;
+                parameters: Array<{ name: string; type: string; optional?: boolean }>;
                 description: string;
             }>;
         };
@@ -260,6 +266,24 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
                     const item = new vscode.CompletionItem(constant.name, vscode.CompletionItemKind.Constant);
                     item.detail = `${constant.type} = ${constant.value}`;
                     item.documentation = new vscode.MarkdownString(constant.description);
+                    completionItems.push(item);
+                });
+            }
+
+            // Add methods (for builtin classes like String, Array, Map, Set)
+            if (pkg.methods) {
+                pkg.methods.forEach(method => {
+                    const item = new vscode.CompletionItem(method.name, vscode.CompletionItemKind.Method);
+                    const params = method.parameters.map(p => {
+                        const optional = p.optional ? '?' : '';
+                        return `${p.name}${optional}: ${p.type}`;
+                    }).join(', ');
+                    item.detail = `${method.name}(${params}) -> ${method.returnType}`;
+                    item.documentation = new vscode.MarkdownString(method.description);
+                    
+                    const snippetParams = method.parameters.filter(p => !p.optional).map((p, i) => `\${${i + 1}:${p.name}}`).join(', ');
+                    item.insertText = new vscode.SnippetString(`${method.name}(${snippetParams})`);
+                    
                     completionItems.push(item);
                 });
             }

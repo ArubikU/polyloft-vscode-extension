@@ -18,13 +18,19 @@ interface BuiltinPackages {
             functions?: Array<{
                 name: string;
                 returnType: string;
-                parameters: Array<{ name: string; type: string }>;
+                parameters: Array<{ name: string; type: string; optional?: boolean }>;
                 description: string;
             }>;
             constants?: Array<{
                 name: string;
                 type: string;
                 value: any;
+                description: string;
+            }>;
+            methods?: Array<{
+                name: string;
+                returnType: string;
+                parameters: Array<{ name: string; type: string; optional?: boolean }>;
                 description: string;
             }>;
         };
@@ -117,6 +123,25 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                                 markdown.appendCodeblock(`${packageName}.${constant.name}: ${constant.type} = ${constant.value}`, 'polyloft');
                                 markdown.appendMarkdown('\n\n' + constant.description);
                                 markdown.appendMarkdown('\n\n*Built-in constant*');
+                                
+                                return new vscode.Hover(markdown);
+                            }
+                        }
+                    }
+
+                    // Check methods (for builtin classes like String, Array, Map, Set)
+                    if (pkg.methods) {
+                        for (const method of pkg.methods) {
+                            if (method.name === word) {
+                                const params = method.parameters.map(p => {
+                                    const optional = p.optional ? '?' : '';
+                                    return `${p.name}${optional}: ${p.type}`;
+                                }).join(', ');
+                                
+                                const markdown = new vscode.MarkdownString();
+                                markdown.appendCodeblock(`${packageName}.${method.name}(${params}) -> ${method.returnType}`, 'polyloft');
+                                markdown.appendMarkdown('\n\n' + method.description);
+                                markdown.appendMarkdown('\n\n*Built-in method*');
                                 
                                 return new vscode.Hover(markdown);
                             }
