@@ -503,9 +503,10 @@ export class PolyloftLinter {
             }
             
             // Check for division by zero
-            if (line.match(/\/\s*0(?![\.0-9])/)) {
-                const divIndex = line.indexOf('/ 0');
-                const range = new vscode.Range(i, divIndex, i, divIndex + 3);
+            const divZeroMatch = line.match(/\/\s*(0)(?![\.0-9])/);
+            if (divZeroMatch) {
+                const divIndex = line.indexOf(divZeroMatch[0]);
+                const range = new vscode.Range(i, divIndex, i, divIndex + divZeroMatch[0].length);
                 diagnostics.push(
                     new vscode.Diagnostic(
                         range,
@@ -562,52 +563,50 @@ export class PolyloftLinter {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
             // Check for 'and' keyword (should be &&)
-            const andMatch = line.match(/\b(and)\b/);
-            if (andMatch && !line.trim().startsWith('//')) {
-                const andIndex = line.indexOf(' and ');
-                if (andIndex !== -1) {
-                    const range = new vscode.Range(i, andIndex + 1, i, andIndex + 4);
-                    diagnostics.push(
-                        new vscode.Diagnostic(
-                            range,
-                            "Use '&&' instead of 'and'. Polyloft does not have an 'and' keyword",
-                            vscode.DiagnosticSeverity.Error
-                        )
-                    );
-                }
+            let andMatch;
+            const andRegex = /\band\b/g;
+            while ((andMatch = andRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, andMatch.index, i, andMatch.index + 3);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '&&' instead of 'and'. Polyloft does not have an 'and' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
             }
             
             // Check for 'or' keyword (should be ||)
-            const orMatch = line.match(/\b(or)\b/);
-            if (orMatch && !line.trim().startsWith('//')) {
-                const orIndex = line.indexOf(' or ');
-                if (orIndex !== -1) {
-                    const range = new vscode.Range(i, orIndex + 1, i, orIndex + 3);
-                    diagnostics.push(
-                        new vscode.Diagnostic(
-                            range,
-                            "Use '||' instead of 'or'. Polyloft does not have an 'or' keyword",
-                            vscode.DiagnosticSeverity.Error
-                        )
-                    );
-                }
+            let orMatch;
+            const orRegex = /\bor\b/g;
+            while ((orMatch = orRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, orMatch.index, i, orMatch.index + 2);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '||' instead of 'or'. Polyloft does not have an 'or' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
             }
             
             // Check for 'not' keyword (should be !)
-            const notMatch = line.match(/\bnot\s+/);
-            if (notMatch && !line.trim().startsWith('//')) {
-                const notIndex = line.indexOf('not ');
-                if (notIndex !== -1) {
-                    const range = new vscode.Range(i, notIndex, i, notIndex + 3);
-                    diagnostics.push(
-                        new vscode.Diagnostic(
-                            range,
-                            "Use '!' instead of 'not'. Polyloft does not have a 'not' keyword",
-                            vscode.DiagnosticSeverity.Error
-                        )
-                    );
-                }
+            let notMatch;
+            const notRegex = /\bnot\s+/g;
+            while ((notMatch = notRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, notMatch.index, i, notMatch.index + 3);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '!' instead of 'not'. Polyloft does not have a 'not' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
             }
         }
     }
@@ -619,13 +618,18 @@ export class PolyloftLinter {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
             // Check for .. (two dots) which is not valid in Polyloft
-            const rangeTwoDotsMatch = line.match(/(\d+)\.\.(\d+)/);
-            if (rangeTwoDotsMatch && !line.trim().startsWith('//')) {
-                const rangeIndex = line.indexOf('..');
+            let rangeTwoDotsMatch;
+            const rangeRegex = /(\d+)\.\.(\d+)/g;
+            while ((rangeTwoDotsMatch = rangeRegex.exec(line)) !== null) {
                 // Make sure it's not ... (three dots)
-                if (line[rangeIndex + 2] !== '.') {
-                    const range = new vscode.Range(i, rangeIndex, i, rangeIndex + 2);
+                if (line[rangeTwoDotsMatch.index + rangeTwoDotsMatch[0].indexOf('..') + 2] !== '.') {
+                    const dotIndex = rangeTwoDotsMatch.index + rangeTwoDotsMatch[0].indexOf('..');
+                    const range = new vscode.Range(i, dotIndex, i, dotIndex + 2);
                     diagnostics.push(
                         new vscode.Diagnostic(
                             range,
@@ -645,11 +649,15 @@ export class PolyloftLinter {
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
             // Check for incorrect interpolation syntax (${} instead of #{})
-            const wrongInterpMatch = line.match(/\$\{[^}]+\}/);
-            if (wrongInterpMatch && !line.trim().startsWith('//')) {
-                const interpIndex = line.indexOf('${');
-                const range = new vscode.Range(i, interpIndex, i, interpIndex + 2);
+            let wrongInterpMatch;
+            const wrongInterpRegex = /\$\{[^}]+\}/g;
+            while ((wrongInterpMatch = wrongInterpRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, wrongInterpMatch.index, i, wrongInterpMatch.index + 2);
                 diagnostics.push(
                     new vscode.Diagnostic(
                         range,
@@ -660,11 +668,14 @@ export class PolyloftLinter {
             }
             
             // Warn about unescaped # in strings (might be intended interpolation)
-            const stringMatch = line.match(/"([^"]*#[^{][^"]*)"/);
-            if (stringMatch && !line.trim().startsWith('//')) {
-                const hashIndex = line.indexOf(stringMatch[1]);
-                if (hashIndex !== -1) {
-                    const range = new vscode.Range(i, hashIndex, i, hashIndex + stringMatch[1].length);
+            let stringMatch;
+            const stringRegex = /"([^"]*#[^{][^"]*)"/g;
+            while ((stringMatch = stringRegex.exec(line)) !== null) {
+                // Find the position of # within the matched string
+                const hashPos = stringMatch[1].indexOf('#');
+                if (hashPos !== -1) {
+                    const absoluteHashPos = stringMatch.index + 1 + hashPos;  // +1 for opening quote
+                    const range = new vscode.Range(i, absoluteHashPos, i, absoluteHashPos + 1);
                     diagnostics.push(
                         new vscode.Diagnostic(
                             range,
