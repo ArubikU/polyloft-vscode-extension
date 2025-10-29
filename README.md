@@ -5,9 +5,14 @@ This extension provides comprehensive language support for Polyloft programming 
 ## Features
 
 ### Syntax Highlighting
-- Full syntax highlighting for `.pf` files
+- Full syntax highlighting for `.pf` and `.pfx` files
 - Support for all Polyloft keywords, operators, and language constructs
 - String interpolation highlighting with `#{expression}` syntax
+- Comments: `//` line comments and `/* */` block comments
+- Keywords: `let`, `def`, `class`, `if`, `elif`, `for`, `loop`, `where`, `return`, `break`, `continue`, `end`
+- Logical operators: `&&`, `||`, `!` (note: `and`, `or`, `not` keywords do not exist in Polyloft)
+- Ranges: `0...10` (three dots only, not two)
+- Type annotations: `let x: Int = 5`, `def foo() -> Int:`
 
 ### Linting
 - Real-time error detection and reporting
@@ -68,6 +73,12 @@ The extension includes built-in support for:
 ### Global Functions
 - `println(...)` - Print to stdout with newline
 - `print(...)` - Print to stdout without newline
+- `len(...)` - Get length of collection
+- `range(...)` - Generate range of numbers
+- `int(...)` - Convert to integer
+- `float(...)` - Convert to float
+- `str(...)` - Convert to string
+- `bool(...)` - Convert to boolean
 
 ### System Functions (Sys)
 - `Sys.time()` - Get current time in milliseconds
@@ -78,9 +89,19 @@ The extension includes built-in support for:
 - Constants: `Math.PI`, `Math.E`
 - Functions: `sqrt`, `pow`, `abs`, `sin`, `cos`, `tan`, `floor`, `ceil`, `round`, `min`, `max`
 
-### Standard Library
-- `math.vector` - Vector mathematics (Vec2, Vec3, Vec4)
-- `utils` - General utility functions
+### Built-in Types
+- `Int`, `Float`, `String`, `Bool`, `Void`, `Any`
+- `Array`, `Map`, `List`, `Set`, `Deque`, `Tuple`, `Pair`
+- `Range`, `Bytes`
+- `Promise`, `CompletableFuture`
+- `HttpServer`, `HttpRequest`, `HttpResponse`
+
+### Built-in Classes
+- `Sys`, `Math`, `Array`, `String`, `Map`, `Set`, `List`
+- `Tuple`, `Deque`, `Range`, `Bytes`
+- `Generic`, `Object`, `Cronometer`
+- `Net`, `Http`, `IO`, `File`, `Socket`
+- `Promise`, `CompletableFuture`
 
 ## Usage
 
@@ -92,54 +113,71 @@ The extension includes built-in support for:
 
 ### Classes and Objects
 ```polyloft
-import math.vector { Vec2, Vec3 }
-
-class Player
-    var position: Vec2
-    var health: Int
-
-    Player(x: Float, y: Float):
-        this.position = Vec2(x, y)
-        this.health = 100
+class Point:
+    let x
+    let y
+    
+    def init(x, y):
+        this.x = x
+        this.y = y
     end
-
-    def move(dx: Float, dy: Float) -> Void:
-        this.position = this.position + Vec2(dx, dy)
+    
+    def distance():
+        return Math.sqrt(this.x * this.x + this.y * this.y)
     end
 end
 
-let player = Player(0.0, 0.0)
-player.move(10.0, 5.0)
-println("Player position:", player.position.to_s())
+let p = Point(3, 4)
+println("Distance from origin: " + p.distance())  // 5.0
+```
+
+### Functions and Loops
+```polyloft
+// Fibonacci using iterative approach
+def fibonacci(n):
+    if n <= 1:
+        return n
+    end
+    
+    let a = 0
+    let b = 1
+    
+    for i in range(2, n + 1):
+        let temp = a + b
+        a = b
+        b = temp
+    end
+    
+    return b
+end
+
+println("Fib(10) = " + fibonacci(10))  // 55
+```
+
+### Where Clause
+```polyloft
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let sum = 0
+
+// Filter with where clause
+for n in numbers where n > 5:
+    sum = sum + n
+end
+
+println("Sum of numbers > 5: " + sum)  // 40
 ```
 
 ### Enums
 ```polyloft
-// Simple enum
 enum Color
     RED
     GREEN
     BLUE
 end
 
-// Enum with methods
-enum Status
-    PENDING
-    ACTIVE
-    COMPLETED
-    
-    def isFinished():
-        return this.name == "COMPLETED"
-    end
-end
-
-// Using enums - IntelliSense will suggest:
-// Color. -> RED, GREEN, BLUE, valueOf(), values(), size(), names()
 let color = Color.RED
-
-// Color.RED. -> name, ordinal, toString()
-println(color.name)           // "RED"
-println(color.ordinal)        // 0
+println(color.name)      // "RED"
+println(color.ordinal)   // 0
 
 // Static methods
 let allColors = Color.values()
@@ -148,23 +186,42 @@ let green = Color.valueOf("GREEN")
 
 ### Records
 ```polyloft
-// Record with components and methods
 record Point(x: Int, y: Int)
     def sum():
         return this.x + this.y
     end
-    
-    def distance():
-        return Math.sqrt(this.x * this.x + this.y * this.y)
-    end
 end
 
-// Using records - IntelliSense will suggest:
-// point. -> x, y, sum(), distance(), toString()
 let point = Point(3, 4)
-println(point.x)              // 3
-println(point.sum())          // 7
-println(point.toString())     // "Point(x=3, y=4)"
+println(point.x)        // 3
+println(point.sum())    // 7
+```
+
+### String Interpolation and Ranges
+```polyloft
+let name = "Alice"
+let age = 25
+println("Hello, #{name}! You are #{age} years old.")
+
+// Range with ... (three dots)
+for i in 0...10:
+    println(i)  // Prints 0 through 10
+end
+```
+
+### Logical Operators
+```polyloft
+// Use &&, ||, ! (NOT and, or, not)
+let a = true
+let b = false
+
+if a && !b:
+    println("a is true and b is false")
+end
+
+if a || b:
+    println("At least one is true")
+end
 ```
 
 ## Requirements

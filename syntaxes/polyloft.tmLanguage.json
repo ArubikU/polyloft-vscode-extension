@@ -2,30 +2,115 @@
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "Polyloft",
   "scopeName": "source.polyloft",
+  "fileTypes": [
+    "pf"
+  ],
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#keywords" },
-    { "include": "#constants" },
-    { "include": "#operators" },
-    { "include": "#numbers" },
-    { "include": "#annotations" },
-    { "include": "#functions" },
-    { "include": "#classes" },
-    { "include": "#types" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#functions"
+    },
+    {
+      "include": "#classes"
+    },
+    {
+      "include": "#type-annotations"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#builtin-functions"
+    },
+    {
+      "include": "#storage"
+    }
   ],
   "repository": {
     "comments": {
       "patterns": [
         {
           "name": "comment.line.double-slash.polyloft",
-          "begin": "//",
-          "end": "$"
+          "match": "//.*$"
         },
         {
           "name": "comment.block.polyloft",
           "begin": "/\\*",
           "end": "\\*/"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.polyloft",
+          "match": "\\b(if|elif|else|for|loop|break|continue|return|in|end|do|try|catch|finally|throw|defer|switch|case|default|where)\\b"
+        },
+        {
+          "name": "keyword.other.polyloft",
+          "match": "\\b(import|from|as|export|implements|instanceof|extends|out)\\b"
+        }
+      ]
+    },
+    "storage": {
+      "patterns": [
+        {
+          "name": "storage.type.polyloft",
+          "match": "\\b(let|var|const|final|def|class|interface|enum|record)\\b"
+        },
+        {
+          "name": "storage.modifier.polyloft",
+          "match": "\\b(public|pub|private|priv|protected|prot|static|abstract|sealed)\\b"
+        },
+        {
+          "name": "variable.language.polyloft",
+          "match": "\\b(this|super)\\b"
+        }
+      ]
+    },
+    "type-annotations": {
+      "patterns": [
+        {
+          "name": "meta.type.annotation.polyloft",
+          "match": ":\\s*([A-Z][a-zA-Z0-9_]*)(?:<([A-Z][a-zA-Z0-9_]*(?:\\s*,\\s*[A-Z][a-zA-Z0-9_]*)*)>)?",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.polyloft"
+            },
+            "2": {
+              "name": "entity.name.type.generic.polyloft"
+            }
+          }
+        },
+        {
+          "name": "meta.return.type.polyloft",
+          "match": "->\\s*([A-Z][a-zA-Z0-9_]*)(?:<([A-Z][a-zA-Z0-9_]*(?:\\s*,\\s*[A-Z][a-zA-Z0-9_]*)*)>)?",
+          "captures": {
+            "1": {
+              "name": "entity.name.type.polyloft"
+            },
+            "2": {
+              "name": "entity.name.type.generic.polyloft"
+            }
+          }
+        },
+        {
+          "name": "entity.name.type.builtin.polyloft",
+          "match": "\\b(Int|Float|String|Bool|Array|Map|List|Set|Deque|Tuple|Pair|Range|Bytes|Promise|CompletableFuture|HttpServer|HttpRequest|HttpResponse|Any|Void)\\b"
         }
       ]
     },
@@ -41,11 +126,13 @@
               "match": "\\\\."
             },
             {
-              "name": "meta.embedded.expression.polyloft",
+              "name": "meta.embedded.line.polyloft",
               "begin": "#\\{",
               "end": "\\}",
               "patterns": [
-                { "include": "$self" }
+                {
+                  "include": "$self"
+                }
               ]
             }
           ]
@@ -63,104 +150,40 @@
         }
       ]
     },
-    "keywords": {
-      "patterns": [
-        {
-          "name": "keyword.control.polyloft",
-          "match": "\\b(if|elif|else|for|in|loop|break|continue|return|do|end|try|catch|finally|throw)\\b"
-        },
-        {
-          "name": "keyword.control.import.polyloft",
-          "match": "\\b(import)\\b"
-        },
-        {
-          "name": "storage.type.class.polyloft",
-          "match": "\\b(class|interface|enum|record)\\b"
-        },
-        {
-          "name": "keyword.other.polyloft",
-          "match": "\\b(implements|abstract|sealed|instanceof|thread|spawn|join)\\b"
-        },
-        {
-          "name": "storage.type.polyloft",
-          "match": "\\b(var|let|const|final|def)\\b"
-        },
-        {
-          "name": "storage.modifier.polyloft",
-          "match": "\\b(public|pub|private|priv|protected|prot|static)\\b"
-        },
-        {
-          "name": "variable.language.polyloft",
-          "match": "\\b(this|super)\\b"
-        }
-      ]
-    },
-    "constants": {
-      "patterns": [
-        {
-          "name": "constant.language.polyloft",
-          "match": "\\b(true|false|nil)\\b"
-        }
-      ]
-    },
-    "operators": {
-      "patterns": [
-        {
-          "name": "keyword.operator.comparison.polyloft",
-          "match": "(==|!=|<=|>=|<|>)"
-        },
-        {
-          "name": "keyword.operator.logical.polyloft",
-          "match": "(&&|\\|\\||!|\\band\\b|\\bor\\b|\\bnot\\b)"
-        },
-        {
-          "name": "keyword.operator.arithmetic.polyloft",
-          "match": "(\\+|\\-|\\*|\\/|%)"
-        },
-        {
-          "name": "keyword.operator.assignment.polyloft",
-          "match": "(=|:=)"
-        },
-        {
-          "name": "keyword.operator.arrow.polyloft",
-          "match": "(=>|->)"
-        },
-        {
-          "name": "keyword.operator.ternary.polyloft",
-          "match": "(\\?|:)"
-        }
-      ]
-    },
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.float.polyloft",
-          "match": "\\b\\d+\\.\\d+f\\b"
+          "name": "constant.numeric.hex.polyloft",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
         },
         {
-          "name": "constant.numeric.double.polyloft",
-          "match": "\\b\\d+\\.\\d+\\b"
+          "name": "constant.numeric.binary.polyloft",
+          "match": "\\b0b[01]+\\b"
+        },
+        {
+          "name": "constant.numeric.float.polyloft",
+          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?f?\\b"
         },
         {
           "name": "constant.numeric.integer.polyloft",
           "match": "\\b\\d+\\b"
-        },
-        {
-          "name": "constant.numeric.hex.polyloft",
-          "match": "\\b0x[0-9a-fA-F]+\\b"
-        }
-      ]
-    },
-    "annotations": {
-      "patterns": [
-        {
-          "name": "storage.type.annotation.polyloft",
-          "match": "@\\w+"
         }
       ]
     },
     "functions": {
       "patterns": [
+        {
+          "name": "meta.function.polyloft",
+          "match": "\\b(def)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+          "captures": {
+            "1": {
+              "name": "storage.type.function.polyloft"
+            },
+            "2": {
+              "name": "entity.name.function.polyloft"
+            }
+          }
+        },
         {
           "name": "entity.name.function.polyloft",
           "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
@@ -171,48 +194,96 @@
       "patterns": [
         {
           "name": "meta.class.polyloft",
-          "match": "(class)\\s+([A-Z][a-zA-Z0-9_]*)(?:\\s*(<)\\s*([A-Z][a-zA-Z0-9_]*))?(?:\\s+(implements)\\s+([A-Z][a-zA-Z0-9_,\\s]+))?",
+          "match": "\\b(class)\\s+([A-Z][a-zA-Z0-9_]*)(?:\\s*<\\s*([A-Z][a-zA-Z0-9_,\\s]*)\\s*>)?\\s*(?:<\\s*([A-Z][a-zA-Z0-9_]*))?",
           "captures": {
-            "1": { "name": "storage.type.class.polyloft" },
-            "2": { "name": "entity.name.type.class.polyloft" },
-            "3": { "name": "keyword.operator.inheritance.polyloft" },
-            "4": { "name": "entity.other.inherited-class.polyloft" },
-            "5": { "name": "keyword.other.polyloft" },
-            "6": { "name": "entity.other.inherited-class.polyloft" }
+            "1": {
+              "name": "storage.type.class.polyloft"
+            },
+            "2": {
+              "name": "entity.name.class.polyloft"
+            },
+            "3": {
+              "name": "entity.name.type.generic.polyloft"
+            },
+            "4": {
+              "name": "entity.other.inherited-class.polyloft"
+            }
           }
         },
         {
           "name": "meta.interface.polyloft",
-          "match": "(interface)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "match": "\\b(interface)\\s+([A-Z][a-zA-Z0-9_]*)(?:\\s*<\\s*([A-Z][a-zA-Z0-9_,\\s]*)\\s*>)?",
           "captures": {
-            "1": { "name": "storage.type.class.polyloft" },
-            "2": { "name": "entity.name.type.interface.polyloft" }
+            "1": {
+              "name": "storage.type.interface.polyloft"
+            },
+            "2": {
+              "name": "entity.name.interface.polyloft"
+            },
+            "3": {
+              "name": "entity.name.type.generic.polyloft"
+            }
           }
         },
         {
           "name": "meta.enum.polyloft",
-          "match": "(enum)\\s+([A-Z][a-zA-Z0-9_]*)",
+          "match": "\\b(enum)\\s+([A-Z][a-zA-Z0-9_]*)",
           "captures": {
-            "1": { "name": "storage.type.class.polyloft" },
-            "2": { "name": "entity.name.type.enum.polyloft" }
-          }
-        },
-        {
-          "name": "meta.record.polyloft",
-          "match": "(record)\\s+([A-Z][a-zA-Z0-9_]*)(?:\\s*\\(([^)]*)\\))?",
-          "captures": {
-            "1": { "name": "storage.type.class.polyloft" },
-            "2": { "name": "entity.name.type.class.polyloft" },
-            "3": { "name": "meta.record.parameters.polyloft" }
+            "1": {
+              "name": "storage.type.enum.polyloft"
+            },
+            "2": {
+              "name": "entity.name.enum.polyloft"
+            }
           }
         }
       ]
     },
-    "types": {
+    "constants": {
       "patterns": [
         {
-          "name": "support.type.polyloft",
-          "match": "\\b(String|Int|Float|Double|Bool|Void|Array|Map|Any)\\b"
+          "name": "constant.language.polyloft",
+          "match": "\\b(true|false|nil|null)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.polyloft",
+          "match": "\\+|\\-|\\*|\\/|%"
+        },
+        {
+          "name": "keyword.operator.comparison.polyloft",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.polyloft",
+          "match": "&&|\\|\\||!"
+        },
+        {
+          "name": "keyword.operator.assignment.polyloft",
+          "match": "=|\\+=|-=|\\*=|/="
+        },
+        {
+          "name": "keyword.operator.range.polyloft",
+          "match": "\\.\\.\\."
+        },
+        {
+          "name": "keyword.operator.arrow.polyloft",
+          "match": "->|=>"
+        }
+      ]
+    },
+    "builtin-functions": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.polyloft",
+          "match": "\\b(println|print|len|range|int|float|str|bool)\\b"
+        },
+        {
+          "name": "support.class.builtin.polyloft",
+          "match": "\\b(Sys|Array|String|Map|Set|List|Tuple|Deque|Range|Bytes|Generic|Object|Cronometer|Math|Net|Http|IO|File|Socket|Promise|CompletableFuture)\\b"
         }
       ]
     }
