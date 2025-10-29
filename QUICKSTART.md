@@ -75,30 +75,30 @@ let power = Math.pow(2.0, 8.0)
 let time = Sys.time()
 let rand = Sys.random()
 
-println("Pi:", pi)
-println("sqrt(16):", sqrt)
-println("2^8:", power)
+println("Pi: #{pi}")
+println("sqrt(16): #{sqrt}")
+println("2^8: #{power}")
 ```
 
 ### 4. Create a Class
 
 ```polyloft
-class Point
-    var x: Float
-    var y: Float
+class Point:
+    let x
+    let y
     
-    Point(x: Float, y: Float):
+    def init(x, y):
         this.x = x
         this.y = y
     end
     
-    def distance() -> Float:
+    def distance():
         return Math.sqrt(this.x * this.x + this.y * this.y)
     end
 end
 
-let p = Point(3.0, 4.0)
-println("Distance:", p.distance())  // Auto-complete shows 'distance' method
+let p = Point(3, 4)
+println("Distance: #{p.distance()}")  // Auto-complete shows 'distance' method
 ```
 
 ### 5. Use Go to Definition

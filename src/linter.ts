@@ -12,9 +12,10 @@ export class PolyloftLinter {
         'var', 'let', 'const', 'final', 'def', 'class', 'interface', 'import',
         'implements', 'abstract', 'sealed', 'return', 'if', 'elif', 'else',
         'for', 'in', 'loop', 'break', 'continue', 'end', 'do', 'true', 'false',
-        'nil', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
+        'nil', 'null', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
         'protected', 'prot', 'static', 'this', 'super', 'instanceof', 'enum',
-        'record', 'try', 'catch', 'finally', 'throw'
+        'record', 'try', 'catch', 'finally', 'throw', 'defer', 'switch', 'case',
+        'default', 'where', 'from', 'as', 'export', 'extends', 'out'
     ];
 
     public lint(document: vscode.TextDocument, diagnosticCollection: vscode.DiagnosticCollection): void {
@@ -110,7 +111,17 @@ export class PolyloftLinter {
             }
 
             // Check for missing 'end' keyword after block statements
-            if (line.match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally)\b.*:\s*$/)) {
+            // But skip inline statements (single-line after :)
+            const blockMatch = line.match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally|switch|record|enum)\b.*:\s*(.*)$/);
+            if (blockMatch) {
+                const afterColon = blockMatch[2].trim();
+                
+                // Skip if it's an inline statement (has code after the colon)
+                if (afterColon && !afterColon.startsWith('//')) {
+                    // This is inline syntax, doesn't need 'end'
+                    continue;
+                }
+                
                 // Look for corresponding 'end'
                 let foundEnd = false;
                 for (let j = i + 1; j < lines.length; j++) {
@@ -121,17 +132,17 @@ export class PolyloftLinter {
                     // Stop searching if we hit another block start at same or lower indentation
                     const currentIndent = line.match(/^\s*/)?.[0].length || 0;
                     const checkIndent = lines[j].match(/^\s*/)?.[0].length || 0;
-                    if (checkIndent <= currentIndent && lines[j].match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally)\b/)) {
+                    if (checkIndent <= currentIndent && lines[j].match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally|switch|record|enum)\b/)) {
                         break;
                     }
                 }
-                if (!foundEnd && !line.match(/^\s*(else|elif):/)) {
+                if (!foundEnd && !line.match(/^\s*(else|elif|case|default):/)) {
                     
                     const range = new vscode.Range(i, 0, i, line.length);
                     diagnostics.push(
                         new vscode.Diagnostic(
                             range,
-                            'Block statement may be missing corresponding "end" keyword',
+                            'Multi-line block statement may be missing corresponding "end" keyword',
                             vscode.DiagnosticSeverity.Warning
                         )
                     );
@@ -416,7 +427,404 @@ export class PolyloftLinter {
             }
         }
 
+        // Third pass: Enhanced type checking and unreachable code detection
+        this.performTypeChecking(lines, diagnostics);
+        this.detectUnreachableCode(lines, diagnostics);
+        this.detectLogicalOperatorErrors(lines, diagnostics);
+        this.detectRangeOperatorErrors(lines, diagnostics);
+        this.detectStringInterpolationIssues(lines, diagnostics);
+        this.detectCasingIssues(lines, diagnostics);
+        this.validateForWhereClause(lines, diagnostics);
+        this.validateLambdaSyntax(lines, diagnostics);
+        this.validateSwitchCaseSyntax(lines, diagnostics);
+
         diagnosticCollection.set(document.uri, diagnostics);
+    }
+
+    /**
+     * Enhanced: Detect common casing mistakes and suggest corrections
+     */
+    private detectCasingIssues(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const builtinClasses = ['Sys', 'Math', 'String', 'Array', 'Map', 'Set', 'List', 'Http', 'IO', 'Crypto', 'Regex'];
+        const builtinFunctions = ['println', 'print', 'len', 'range', 'int', 'float', 'str', 'bool'];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
+            // Check for lowercase builtin classes
+            for (const className of builtinClasses) {
+                const lowerCase = className.toLowerCase();
+                const pattern = new RegExp(`\\b${lowerCase}\\b(?!\\s*:)`, 'gi');
+                let match;
+                
+                while ((match = pattern.exec(line)) !== null) {
+                    // Skip if it's the correct casing
+                    if (match[0] === className) {
+                        continue;
+                    }
+                    
+                    const range = new vscode.Diagnostic(
+                        new vscode.Range(i, match.index, i, match.index + match[0].length),
+                        `Use '${className}' instead of '${match[0]}'. Built-in class names must start with uppercase`,
+                        vscode.DiagnosticSeverity.Error
+                    );
+                    diagnostics.push(range);
+                }
+            }
+            
+            // Check for uppercase builtin functions
+            for (const funcName of builtinFunctions) {
+                const upperCase = funcName.toUpperCase();
+                const titleCase = funcName.charAt(0).toUpperCase() + funcName.slice(1);
+                const patterns = [upperCase, titleCase];
+                
+                for (const wrongCase of patterns) {
+                    const pattern = new RegExp(`\\b${wrongCase}\\s*\\(`, 'g');
+                    let match;
+                    
+                    while ((match = pattern.exec(line)) !== null) {
+                        const range = new vscode.Diagnostic(
+                            new vscode.Range(i, match.index, i, match.index + wrongCase.length),
+                            `Use '${funcName}' instead of '${wrongCase}'. Built-in functions must be lowercase`,
+                            vscode.DiagnosticSeverity.Error
+                        );
+                        diagnostics.push(range);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Perform basic type checking on variable assignments and function calls
+     */
+    private performTypeChecking(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const variableTypes = new Map<string, string>();
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Track variable declarations with explicit types
+            const varDeclMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_<>,\s]*)/);
+            if (varDeclMatch) {
+                const varName = varDeclMatch[1];
+                const varType = varDeclMatch[2].trim();
+                variableTypes.set(varName, varType);
+            }
+            
+            // Infer types from assignments
+            const varAssignMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
+            if (varAssignMatch && !variableTypes.has(varAssignMatch[1])) {
+                const varName = varAssignMatch[1];
+                const value = varAssignMatch[2].trim();
+                const inferredType = this.inferType(value);
+                if (inferredType) {
+                    variableTypes.set(varName, inferredType);
+                }
+            }
+            
+            // Check type mismatches in assignments
+            const reassignMatch = line.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
+            if (reassignMatch) {
+                const varName = reassignMatch[1];
+                const value = reassignMatch[2].trim();
+                
+                if (variableTypes.has(varName)) {
+                    const expectedType = variableTypes.get(varName)!;
+                    const actualType = this.inferType(value);
+                    
+                    if (actualType && !this.isTypeCompatible(expectedType, actualType)) {
+                        const varIndex = line.indexOf(varName);
+                        const range = new vscode.Range(i, varIndex, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                `Type mismatch: Cannot assign '${actualType}' to variable of type '${expectedType}'`,
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for comparison with incompatible types
+            const comparisonMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*(==|!=|<|>|<=|>=)\s*([a-zA-Z_][a-zA-Z0-9_]*|"[^"]*"|'[^']*'|\d+\.?\d*)/);
+            if (comparisonMatch) {
+                const left = comparisonMatch[1];
+                const right = comparisonMatch[3];
+                
+                if (variableTypes.has(left)) {
+                    const leftType = variableTypes.get(left)!;
+                    const rightType = this.inferType(right);
+                    
+                    if (rightType && !this.isTypeCompatible(leftType, rightType) && !this.isTypeCompatible(rightType, leftType)) {
+                        const range = new vscode.Range(i, 0, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                `Comparing incompatible types: '${leftType}' and '${rightType}'`,
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for division by zero
+            const divZeroMatch = line.match(/\/\s*(0)(?![\.0-9])/);
+            if (divZeroMatch) {
+                const divIndex = line.indexOf(divZeroMatch[0]);
+                const range = new vscode.Range(i, divIndex, i, divIndex + divZeroMatch[0].length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        'Division by zero will cause runtime error',
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect unreachable code after return, break, continue, or throw
+     */
+    private detectUnreachableCode(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            
+            // Check if line contains unconditional control flow statements
+            if (line.match(/^\s*(return|break|continue|throw)\b/) && !line.includes('//')) {
+                // Check next non-empty, non-comment line
+                for (let j = i + 1; j < lines.length; j++) {
+                    const nextLine = lines[j].trim();
+                    
+                    // Skip empty lines and comments
+                    if (!nextLine || nextLine.startsWith('//') || nextLine.startsWith('/*')) {
+                        continue;
+                    }
+                    
+                    // If we find 'end', 'elif', 'else', 'catch', 'finally', it's not unreachable
+                    if (nextLine.match(/^\s*(end|elif|else|catch|finally)\b/)) {
+                        break;
+                    }
+                    
+                    // Otherwise, this is unreachable code
+                    const range = new vscode.Range(j, 0, j, lines[j].length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            'Unreachable code detected',
+                            vscode.DiagnosticSeverity.Warning
+                        )
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect usage of 'and', 'or', 'not' keywords which don't exist in Polyloft
+     */
+    private detectLogicalOperatorErrors(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
+            // Check for 'and' keyword (should be &&)
+            let andMatch;
+            const andRegex = /\band\b/g;
+            while ((andMatch = andRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, andMatch.index, i, andMatch.index + 3);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '&&' instead of 'and'. Polyloft does not have an 'and' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Check for 'or' keyword (should be ||)
+            let orMatch;
+            const orRegex = /\bor\b/g;
+            while ((orMatch = orRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, orMatch.index, i, orMatch.index + 2);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '||' instead of 'or'. Polyloft does not have an 'or' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Check for 'not' keyword (should be !)
+            let notMatch;
+            const notRegex = /\bnot\s+/g;
+            while ((notMatch = notRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, notMatch.index, i, notMatch.index + notMatch[0].length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '!' instead of 'not'. Polyloft does not have a 'not' keyword",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect incorrect range operator (.. instead of ...)
+     */
+    private detectRangeOperatorErrors(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
+            // Check for .. (two dots) which is not valid in Polyloft
+            let rangeTwoDotsMatch;
+            const rangeRegex = /(\d+)\.\.(\d+)/g;
+            while ((rangeTwoDotsMatch = rangeRegex.exec(line)) !== null) {
+                // Make sure it's not ... (three dots)
+                const dotPosition = rangeTwoDotsMatch.index + rangeTwoDotsMatch[1].length;
+                if (line[dotPosition + 2] !== '.') {
+                    const range = new vscode.Range(i, dotPosition, i, dotPosition + 2);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Use '...' (three dots) for ranges, not '..' (two dots)",
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect issues with string interpolation
+     */
+    private detectStringInterpolationIssues(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
+            // Check for incorrect interpolation syntax (${} instead of #{})
+            let wrongInterpMatch;
+            const wrongInterpRegex = /\$\{[^}]+\}/g;
+            while ((wrongInterpMatch = wrongInterpRegex.exec(line)) !== null) {
+                const range = new vscode.Range(i, wrongInterpMatch.index, i, wrongInterpMatch.index + 2);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '#{expression}' for string interpolation, not '${expression}'",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Warn about unescaped # in strings (might be intended interpolation)
+            let stringMatch;
+            const stringRegex = /"([^"]*#[^{][^"]*)"/g;
+            while ((stringMatch = stringRegex.exec(line)) !== null) {
+                // Find the position of # within the matched string
+                const hashPos = stringMatch[1].indexOf('#');
+                if (hashPos !== -1) {
+                    const absoluteHashPos = stringMatch.index + 1 + hashPos;  // +1 for opening quote
+                    const range = new vscode.Range(i, absoluteHashPos, i, absoluteHashPos + 1);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Did you mean to use string interpolation? Use '#{expression}' syntax",
+                            vscode.DiagnosticSeverity.Hint
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Infer the type from a value or expression
+     */
+    private inferType(value: string): string | undefined {
+        value = value.trim();
+        
+        // String literals
+        if (value.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (value.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (value.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (value === 'true' || value === 'false') {
+            return 'Bool';
+        }
+        
+        // Nil/null
+        if (value === 'nil' || value === 'null') {
+            return 'Any';  // nil can be any type
+        }
+        
+        // Array literals
+        if (value.match(/^\[.*\]$/)) {
+            return 'Array';
+        }
+        
+        // Map literals
+        if (value.match(/^\{.*:.*\}$/)) {
+            return 'Map';
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Check if two types are compatible for assignment
+     */
+    private isTypeCompatible(targetType: string, sourceType: string): boolean {
+        // Exact match
+        if (targetType === sourceType) {
+            return true;
+        }
+        
+        // Any can accept anything
+        if (targetType === 'Any') {
+            return true;
+        }
+        
+        // Numeric promotions
+        if (targetType === 'Float' && sourceType === 'Int') {
+            return true;
+        }
+        if (targetType === 'Double' && (sourceType === 'Int' || sourceType === 'Float')) {
+            return true;
+        }
+        
+        return false;
     }
 
     private isInsideClassLikeStructure(lines: string[], currentLine: number): boolean {
@@ -583,5 +991,161 @@ export class PolyloftLinter {
         }
 
         return true;
+    }
+
+    /**
+     * Enhanced: Validate for...where clause syntax
+     */
+    private validateForWhereClause(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for for...where syntax
+            const forWhereMatch = line.match(/^\s*for\s+(.+?)\s+in\s+(.+?)\s+where\s+(.+?):\s*(.*)$/);
+            if (forWhereMatch) {
+                const variable = forWhereMatch[1].trim();
+                const collection = forWhereMatch[2].trim();
+                const condition = forWhereMatch[3].trim();
+                const afterColon = forWhereMatch[4].trim();
+                
+                // Validate that where condition is not empty
+                if (!condition || condition.length === 0) {
+                    const range = new vscode.Range(i, 0, i, line.length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            'Where clause cannot be empty',
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+                
+                // Check for common mistakes like using 'and' instead of '&&' in where clause
+                if (condition.match(/\band\b/)) {
+                    const andIndex = line.indexOf(' and ');
+                    if (andIndex !== -1) {
+                        const range = new vscode.Range(i, andIndex, i, andIndex + 5);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                "Use '&&' instead of 'and' in where clause",
+                                vscode.DiagnosticSeverity.Error
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for incorrect 'where' usage (not in for loop)
+            if (line.match(/^\s*where\s+/) && !line.match(/^\s*for\s+/)) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "'where' keyword can only be used with 'for' loops",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Validate lambda/arrow function syntax
+     */
+    private validateLambdaSyntax(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for lambda expressions: () => do ... end or () => expression
+            const lambdaMatch = line.match(/\(([^)]*)\)\s*=>\s*(do\b|.+)/);
+            if (lambdaMatch) {
+                const body = lambdaMatch[2];
+                
+                // If it starts with 'do', it must have a corresponding 'end'
+                if (body.trim() === 'do') {
+                    let foundEnd = false;
+                    for (let j = i + 1; j < lines.length; j++) {
+                        if (lines[j].match(/^\s*end\s*$/)) {
+                            foundEnd = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundEnd) {
+                        const range = new vscode.Range(i, 0, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                "Lambda expression with 'do' requires corresponding 'end'",
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for incorrect lambda syntax using {} instead of do...end
+            if (line.match(/=>\s*\{/)) {
+                const braceIndex = line.indexOf('=>');
+                const range = new vscode.Range(i, braceIndex, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '=> do...end' for multi-line lambda expressions, not '=>{}'. Polyloft doesn't use braces for blocks",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Validate switch/case syntax
+     */
+    private validateSwitchCaseSyntax(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        let inSwitch = false;
+        let switchIndent = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const indent = line.match(/^\s*/)?.[0].length || 0;
+            
+            // Check for switch statement
+            if (line.match(/^\s*switch\s+/)) {
+                inSwitch = true;
+                switchIndent = indent;
+            }
+            
+            // Check for end of switch
+            if (inSwitch && line.match(/^\s*end\s*$/) && indent === switchIndent) {
+                inSwitch = false;
+            }
+            
+            // Check for case/default outside switch
+            if (!inSwitch && line.match(/^\s*(case|default)\s*:/)) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "'case' and 'default' can only be used inside 'switch' blocks",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Check for missing colon after case value
+            const caseMatch = line.match(/^\s*case\s+([^:]+)$/);
+            if (caseMatch && !line.includes(':')) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Case statement must end with colon (:)",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
     }
 }

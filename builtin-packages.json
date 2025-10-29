@@ -28,6 +28,93 @@
           }
         ],
         "description": "Prints arguments to stdout without a newline"
+      },
+      {
+        "name": "len",
+        "returnType": "Int",
+        "parameters": [
+          {
+            "name": "collection",
+            "type": "Any"
+          }
+        ],
+        "description": "Returns the length of a collection (String, Array, Map, Set, etc.)"
+      },
+      {
+        "name": "range",
+        "returnType": "Range",
+        "parameters": [
+          {
+            "name": "start",
+            "type": "Int"
+          },
+          {
+            "name": "end",
+            "type": "Int",
+            "optional": true
+          },
+          {
+            "name": "step",
+            "type": "Int",
+            "optional": true
+          }
+        ],
+        "description": "Creates a range of numbers. If only one arg, creates 0...arg"
+      },
+      {
+        "name": "int",
+        "returnType": "Int",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "Any"
+          }
+        ],
+        "description": "Converts value to integer"
+      },
+      {
+        "name": "float",
+        "returnType": "Float",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "Any"
+          }
+        ],
+        "description": "Converts value to float"
+      },
+      {
+        "name": "str",
+        "returnType": "String",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "Any"
+          }
+        ],
+        "description": "Converts value to string"
+      },
+      {
+        "name": "bool",
+        "returnType": "Bool",
+        "parameters": [
+          {
+            "name": "value",
+            "type": "Any"
+          }
+        ],
+        "description": "Converts value to boolean"
+      },
+      {
+        "name": "async",
+        "returnType": "Promise",
+        "parameters": [
+          {
+            "name": "function",
+            "type": "Function"
+          }
+        ],
+        "description": "Creates a Promise that executes the function asynchronously"
       }
     ],
     "classes": []
@@ -432,6 +519,171 @@
           ],
           "description": "Returns all matches of the pattern in the text as an array"
         }
+      ]
+    },
+    "Http": {
+      "type": "builtin",
+      "description": "HTTP client and server functionality",
+      "functions": [
+        {"name": "get", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a GET request"},
+        {"name": "post", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "body", "type": "Any"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a POST request"},
+        {"name": "put", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "body", "type": "Any"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a PUT request"},
+        {"name": "delete", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a DELETE request"},
+        {"name": "request", "returnType": "Map", "parameters": [{"name": "method", "type": "String"}, {"name": "url", "type": "String"}, {"name": "options", "type": "Map"}], "description": "Makes a custom HTTP request"},
+        {"name": "createServer", "returnType": "HttpServer", "parameters": [], "description": "Creates an HTTP server instance"}
+      ]
+    },
+    "IO": {
+      "type": "builtin",
+      "description": "File and directory operations",
+      "functions": [
+        {"name": "readFile", "returnType": "String", "parameters": [{"name": "path", "type": "String"}, {"name": "encoding", "type": "String", "optional": true}], "description": "Reads entire file content"},
+        {"name": "writeFile", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}, {"name": "content", "type": "String"}, {"name": "encoding", "type": "String", "optional": true}], "description": "Writes content to file"},
+        {"name": "appendFile", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}, {"name": "content", "type": "String"}], "description": "Appends content to file"},
+        {"name": "exists", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if file or directory exists"},
+        {"name": "delete", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}], "description": "Deletes a file"},
+        {"name": "mkdir", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}], "description": "Creates a directory"},
+        {"name": "readDir", "returnType": "Array", "parameters": [{"name": "path", "type": "String"}], "description": "Lists directory contents"},
+        {"name": "isFile", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if path is a file"},
+        {"name": "isDir", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if path is a directory"}
+      ]
+    },
+    "Crypto": {
+      "type": "builtin",
+      "description": "Cryptographic hashing and encoding functions",
+      "functions": [
+        {"name": "md5", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes MD5 hash (hex-encoded)"},
+        {"name": "sha1", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-1 hash (hex-encoded)"},
+        {"name": "sha256", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-256 hash (hex-encoded)"},
+        {"name": "sha512", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-512 hash (hex-encoded)"},
+        {"name": "base64Encode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Encodes data to Base64"},
+        {"name": "base64Decode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Decodes Base64 data"},
+        {"name": "hexEncode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Encodes data to hexadecimal"},
+        {"name": "hexDecode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Decodes hexadecimal data"}
+      ]
+    },
+    "String": {
+      "type": "builtin-class",
+      "description": "Immutable string type with text manipulation methods",
+      "methods": [
+        {"name": "length", "returnType": "Int", "parameters": [], "description": "Returns the number of characters"},
+        {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if string is empty"},
+        {"name": "charAt", "returnType": "String", "parameters": [{"name": "index", "type": "Int"}], "description": "Returns character at index"},
+        {"name": "indexOf", "returnType": "Int", "parameters": [{"name": "substring", "type": "String"}], "description": "Returns index of first occurrence, or -1"},
+        {"name": "substring", "returnType": "String", "parameters": [{"name": "start", "type": "Int"}, {"name": "end", "type": "Int", "optional": true}], "description": "Extracts substring from start to end"},
+        {"name": "toUpperCase", "returnType": "String", "parameters": [], "description": "Converts to uppercase"},
+        {"name": "toLowerCase", "returnType": "String", "parameters": [], "description": "Converts to lowercase"},
+        {"name": "trim", "returnType": "String", "parameters": [], "description": "Removes leading/trailing whitespace"},
+        {"name": "startsWith", "returnType": "Bool", "parameters": [{"name": "prefix", "type": "String"}], "description": "Checks if starts with prefix"},
+        {"name": "endsWith", "returnType": "Bool", "parameters": [{"name": "suffix", "type": "String"}], "description": "Checks if ends with suffix"},
+        {"name": "contains", "returnType": "Bool", "parameters": [{"name": "substring", "type": "String"}], "description": "Checks if contains substring"},
+        {"name": "replace", "returnType": "String", "parameters": [{"name": "old", "type": "String"}, {"name": "new", "type": "String"}], "description": "Replaces all occurrences"},
+        {"name": "split", "returnType": "Array", "parameters": [{"name": "delimiter", "type": "String"}], "description": "Splits into array"},
+        {"name": "repeat", "returnType": "String", "parameters": [{"name": "count", "type": "Int"}], "description": "Repeats string count times"}
+      ]
+    },
+    "Array": {
+      "type": "builtin-class",
+      "description": "Dynamic mutable collection of elements",
+      "methods": [
+        {"name": "length", "returnType": "Int", "parameters": [], "description": "Returns number of elements"},
+        {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if array is empty"},
+        {"name": "add", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Adds element to end"},
+        {"name": "push", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Adds element to end"},
+        {"name": "pop", "returnType": "Any", "parameters": [], "description": "Removes and returns last element"},
+        {"name": "shift", "returnType": "Any", "parameters": [], "description": "Removes and returns first element"},
+        {"name": "unshift", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Adds element to beginning"},
+        {"name": "set", "returnType": "Void", "parameters": [{"name": "index", "type": "Int"}, {"name": "value", "type": "Any"}], "description": "Sets value at index"},
+        {"name": "get", "returnType": "Any", "parameters": [{"name": "index", "type": "Int"}], "description": "Gets value at index"},
+        {"name": "reverse", "returnType": "Void", "parameters": [], "description": "Reverses array in place"},
+        {"name": "sort", "returnType": "Void", "parameters": [], "description": "Sorts array in place"},
+        {"name": "clear", "returnType": "Void", "parameters": [], "description": "Removes all elements"},
+        {"name": "contains", "returnType": "Bool", "parameters": [{"name": "element", "type": "Any"}], "description": "Checks if contains element"},
+        {"name": "indexOf", "returnType": "Int", "parameters": [{"name": "element", "type": "Any"}], "description": "Returns index of element or -1"},
+        {"name": "concat", "returnType": "Array", "parameters": [{"name": "other", "type": "Array"}], "description": "Returns new array combining both"},
+        {"name": "slice", "returnType": "Array", "parameters": [{"name": "start", "type": "Int"}, {"name": "end", "type": "Int", "optional": true}], "description": "Returns shallow copy of portion"},
+        {"name": "join", "returnType": "String", "parameters": [{"name": "separator", "type": "String", "optional": true}], "description": "Joins elements into string"},
+        {"name": "map", "returnType": "Array", "parameters": [{"name": "fn", "type": "Function"}], "description": "Creates new array with function results"},
+        {"name": "filter", "returnType": "Array", "parameters": [{"name": "fn", "type": "Function"}], "description": "Creates new array with filtered elements"},
+        {"name": "reduce", "returnType": "Any", "parameters": [{"name": "fn", "type": "Function"}, {"name": "initial", "type": "Any", "optional": true}], "description": "Reduces to single value"},
+        {"name": "forEach", "returnType": "Void", "parameters": [{"name": "fn", "type": "Function"}], "description": "Executes function for each element"},
+        {"name": "find", "returnType": "Any", "parameters": [{"name": "fn", "type": "Function"}], "description": "Returns first element matching predicate"},
+        {"name": "findIndex", "returnType": "Int", "parameters": [{"name": "fn", "type": "Function"}], "description": "Returns index of first match or -1"},
+        {"name": "every", "returnType": "Bool", "parameters": [{"name": "fn", "type": "Function"}], "description": "Tests if all elements pass predicate"},
+        {"name": "some", "returnType": "Bool", "parameters": [{"name": "fn", "type": "Function"}], "description": "Tests if any element passes predicate"}
+      ]
+    },
+    "Map": {
+      "type": "builtin-class",
+      "description": "Key-value data structure (dictionary/hash table)",
+      "methods": [
+        {"name": "get", "returnType": "Any", "parameters": [{"name": "key", "type": "Any"}, {"name": "default", "type": "Any", "optional": true}], "description": "Gets value for key, returns default if not found"},
+        {"name": "set", "returnType": "Void", "parameters": [{"name": "key", "type": "Any"}, {"name": "value", "type": "Any"}], "description": "Sets a key-value pair"},
+        {"name": "put", "returnType": "Void", "parameters": [{"name": "key", "type": "Any"}, {"name": "value", "type": "Any"}], "description": "Sets a key-value pair"},
+        {"name": "has", "returnType": "Bool", "parameters": [{"name": "key", "type": "Any"}], "description": "Checks if key exists"},
+        {"name": "hasKey", "returnType": "Bool", "parameters": [{"name": "key", "type": "Any"}], "description": "Checks if key exists"},
+        {"name": "remove", "returnType": "Void", "parameters": [{"name": "key", "type": "Any"}], "description": "Removes a key-value pair"},
+        {"name": "delete", "returnType": "Void", "parameters": [{"name": "key", "type": "Any"}], "description": "Removes a key-value pair"},
+        {"name": "clear", "returnType": "Void", "parameters": [], "description": "Removes all entries"},
+        {"name": "size", "returnType": "Int", "parameters": [], "description": "Returns number of entries"},
+        {"name": "length", "returnType": "Int", "parameters": [], "description": "Returns number of entries"},
+        {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if map is empty"},
+        {"name": "keys", "returnType": "Array", "parameters": [], "description": "Returns array of all keys"},
+        {"name": "values", "returnType": "Array", "parameters": [], "description": "Returns array of all values"},
+        {"name": "entries", "returnType": "Array", "parameters": [], "description": "Returns array of [key, value] pairs"},
+        {"name": "serialize", "returnType": "String", "parameters": [], "description": "Converts Map to JSON string"}
+      ],
+      "functions": [
+        {"name": "deserialize", "returnType": "Map", "parameters": [{"name": "jsonString", "type": "String"}], "description": "Parses JSON string into Map"}
+      ]
+    },
+    "Set": {
+      "type": "builtin-class",
+      "description": "Collection of unique values with fast membership testing",
+      "methods": [
+        {"name": "add", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Adds an element to the set"},
+        {"name": "remove", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Removes an element from the set"},
+        {"name": "delete", "returnType": "Void", "parameters": [{"name": "element", "type": "Any"}], "description": "Removes an element from the set"},
+        {"name": "has", "returnType": "Bool", "parameters": [{"name": "element", "type": "Any"}], "description": "Checks if element exists in set"},
+        {"name": "contains", "returnType": "Bool", "parameters": [{"name": "element", "type": "Any"}], "description": "Checks if element exists in set"},
+        {"name": "size", "returnType": "Int", "parameters": [], "description": "Returns number of elements"},
+        {"name": "length", "returnType": "Int", "parameters": [], "description": "Returns number of elements"},
+        {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if set is empty"},
+        {"name": "clear", "returnType": "Void", "parameters": [], "description": "Removes all elements"},
+        {"name": "toArray", "returnType": "Array", "parameters": [], "description": "Converts set to array"}
+      ]
+    },
+    "Promise": {
+      "type": "builtin-class",
+      "description": "Represents an asynchronous operation that will complete in the future",
+      "methods": [
+        {"name": "await", "returnType": "Any", "parameters": [], "description": "Waits for the promise to resolve and returns the result"},
+        {"name": "then", "returnType": "Promise", "parameters": [{"name": "onFulfilled", "type": "Function"}], "description": "Chains a callback to execute when the promise resolves"},
+        {"name": "catch", "returnType": "Promise", "parameters": [{"name": "onRejected", "type": "Function"}], "description": "Chains a callback to handle errors"},
+        {"name": "finally", "returnType": "Promise", "parameters": [{"name": "handler", "type": "Function"}], "description": "Executes code regardless of promise outcome"}
+      ]
+    },
+    "CompletableFuture": {
+      "type": "builtin-class",
+      "description": "Java-style CompletableFuture for more control over async operations",
+      "methods": [
+        {"name": "complete", "returnType": "Void", "parameters": [{"name": "value", "type": "Any"}], "description": "Complete the future with a value"},
+        {"name": "get", "returnType": "Any", "parameters": [], "description": "Wait for completion and get value"},
+        {"name": "getTimeout", "returnType": "Any", "parameters": [{"name": "milliseconds", "type": "Int"}], "description": "Wait with timeout"},
+        {"name": "isDone", "returnType": "Bool", "parameters": [], "description": "Check if completed"},
+        {"name": "cancel", "returnType": "Void", "parameters": [], "description": "Cancel the future"}
+      ]
+    },
+    "Bytes": {
+      "type": "builtin-class",
+      "description": "Represents binary data with byte manipulation methods",
+      "methods": [
+        {"name": "size", "returnType": "Int", "parameters": [], "description": "Returns the number of bytes"},
+        {"name": "get", "returnType": "Int", "parameters": [{"name": "index", "type": "Int"}], "description": "Gets the byte value at index (0-255)"},
+        {"name": "set", "returnType": "Void", "parameters": [{"name": "index", "type": "Int"}, {"name": "value", "type": "Int"}], "description": "Sets the byte value at index"},
+        {"name": "toString", "returnType": "String", "parameters": [], "description": "Converts bytes to string"},
+        {"name": "asString", "returnType": "String", "parameters": [], "description": "Alias for toString()"},
+        {"name": "toArray", "returnType": "Array", "parameters": [], "description": "Converts bytes to array of integers"}
       ]
     }
   },
