@@ -757,8 +757,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         line: string,
         word: string
     ): Promise<vscode.Hover | undefined> {
-        // Check if the line is an import statement
-        const importMatch = line.match(/^\s*import\s+([a-zA-Z._\/]+)(?:\s*\{([^}]*)\})?/);
+        // Check if the line is an import statement - use same pattern as syntax file
+        const importMatch = line.match(/^\s*import\s+([a-zA-Z_][a-zA-Z0-9_.\/]*)(?:\s*\{([^}]*)\})?/);
         if (!importMatch) {
             return undefined;
         }
@@ -800,8 +800,11 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             let resolvedPath: string | undefined;
             let sourceLocation = 'unknown location';
 
+            // Use async file system operations
             for (const filePath of possiblePaths) {
-                if (fs.existsSync(filePath)) {
+                try {
+                    const fileUri = vscode.Uri.file(filePath);
+                    await vscode.workspace.fs.stat(fileUri);
                     resolvedPath = filePath;
                     
                     // Determine if it's from libs, src, or other
@@ -813,6 +816,9 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         sourceLocation = 'project root';
                     }
                     break;
+                } catch {
+                    // File doesn't exist, continue to next path
+                    continue;
                 }
             }
 
