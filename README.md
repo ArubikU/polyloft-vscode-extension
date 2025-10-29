@@ -16,18 +16,25 @@ This extension provides comprehensive language support for Polyloft programming 
 
 ### Linting
 - Real-time error detection and reporting
+- **Enhanced type checking**: Basic type inference and type mismatch detection
 - Syntax validation including:
   - **Const and final variable reassignment detection**
   - **Break/continue outside loop detection**
   - **Duplicate variable declaration detection**
-  - **Unreachable code detection**
-- Best practice warnings (type annotations, formatting)
+  - **Unreachable code detection** (after return, break, continue, throw)
+  - **Division by zero detection**
+  - **Logical operator errors** (detecting 'and'/'or'/'not' keywords that don't exist)
+  - **Range operator errors** (detecting '..' instead of '...')
+  - **String interpolation errors** (detecting '${}'  instead of '#{}')
+  - **Type mismatches in assignments and comparisons**
+- Best practice warnings (type annotations, naming conventions, indentation)
 - Configurable linting options
 
 ### Auto-completion
-- Keyword completion
-- Built-in function completion (println, print, etc.)
-- Standard library completion (Sys, Math, etc.)
+- **Smart keyword completion** with context-aware suggestions
+- **Enhanced code snippets**: Pre-built templates for classes, functions, enums, records, and more
+- Built-in function completion (println, print, len, range, int, float, str, bool, etc.)
+- Standard library completion (Sys, Math, Array, String, Map, etc.)
 - User-defined class, function, and variable completion
 - Import symbol completion
 - Smart member completion after dot operator
@@ -35,6 +42,7 @@ This extension provides comprehensive language support for Polyloft programming 
 - **Enum instance completion**: Enum value fields (name, ordinal) and custom methods
 - **Record completion**: Record component fields and custom methods
 - **Class method completion**: Built-in methods like toString()
+- **Snippet templates**: Complete code structures for common patterns (if-else, try-catch, for loops, etc.)
 
 ### Go to Definition
 - Jump to class definitions
@@ -43,15 +51,54 @@ This extension provides comprehensive language support for Polyloft programming 
 - Cross-file navigation for imports
 
 ### Hover Information
+- **Enhanced keyword documentation** with examples for all Polyloft keywords
 - Type information on hover
 - Function signatures with parameters and return types
 - Documentation for built-in functions and methods
 - Class inheritance information
+- **Interactive examples** showing proper usage of language features
 
 ### Multi-file Support
 - Parse and understand import statements
 - Cross-file symbol resolution
 - Support for standard library imports
+
+## Advanced Features
+
+### Intelligent Code Snippets
+The extension provides powerful code snippets for rapid development:
+
+- **`class`**: Complete class template with constructor and methods
+- **`record`**: Record definition with fields and methods
+- **`enum`**: Enumeration with multiple values
+- **`def`**: Function with parameters and return type
+- **`for where`**: For loop with filtering where clause
+- **`for range`**: For loop with range iteration
+- **`if else`**: Complete if-elif-else conditional
+- **`try catch`**: Try-catch-finally error handling block
+- **`switch`**: Switch-case statement with default
+- **`main`**: Main function template as entry point
+- **`import`**: Import statement with symbols
+
+### Type Safety
+- Basic type inference for variable declarations
+- Type mismatch detection in assignments
+- Incompatible type warnings in comparisons
+- Numeric type promotion support (Int → Float → Double)
+
+### Error Prevention
+- Detects common mistakes before runtime:
+  - Using `and`/`or`/`not` instead of `&&`/`||`/`!`
+  - Using `..` instead of `...` for ranges
+  - Using `${}` instead of `#{}` for string interpolation
+  - Division by zero
+  - Unreachable code after control flow statements
+
+### Best Practices
+- Naming convention enforcement (classes, enums, records start with uppercase)
+- Type annotation recommendations
+- Indentation consistency hints
+- Unused import detection
 
 ## Configuration
 

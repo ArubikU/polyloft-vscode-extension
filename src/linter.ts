@@ -12,9 +12,10 @@ export class PolyloftLinter {
         'var', 'let', 'const', 'final', 'def', 'class', 'interface', 'import',
         'implements', 'abstract', 'sealed', 'return', 'if', 'elif', 'else',
         'for', 'in', 'loop', 'break', 'continue', 'end', 'do', 'true', 'false',
-        'nil', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
+        'nil', 'null', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
         'protected', 'prot', 'static', 'this', 'super', 'instanceof', 'enum',
-        'record', 'try', 'catch', 'finally', 'throw'
+        'record', 'try', 'catch', 'finally', 'throw', 'defer', 'switch', 'case',
+        'default', 'where', 'from', 'as', 'export', 'extends', 'out'
     ];
 
     public lint(document: vscode.TextDocument, diagnosticCollection: vscode.DiagnosticCollection): void {
@@ -416,7 +417,331 @@ export class PolyloftLinter {
             }
         }
 
+        // Third pass: Enhanced type checking and unreachable code detection
+        this.performTypeChecking(lines, diagnostics);
+        this.detectUnreachableCode(lines, diagnostics);
+        this.detectLogicalOperatorErrors(lines, diagnostics);
+        this.detectRangeOperatorErrors(lines, diagnostics);
+        this.detectStringInterpolationIssues(lines, diagnostics);
+
         diagnosticCollection.set(document.uri, diagnostics);
+    }
+
+    /**
+     * Enhanced: Perform basic type checking on variable assignments and function calls
+     */
+    private performTypeChecking(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const variableTypes = new Map<string, string>();
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Track variable declarations with explicit types
+            const varDeclMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_<>,\s]*)/);
+            if (varDeclMatch) {
+                const varName = varDeclMatch[1];
+                const varType = varDeclMatch[2].trim();
+                variableTypes.set(varName, varType);
+            }
+            
+            // Infer types from assignments
+            const varAssignMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
+            if (varAssignMatch && !variableTypes.has(varAssignMatch[1])) {
+                const varName = varAssignMatch[1];
+                const value = varAssignMatch[2].trim();
+                const inferredType = this.inferType(value);
+                if (inferredType) {
+                    variableTypes.set(varName, inferredType);
+                }
+            }
+            
+            // Check type mismatches in assignments
+            const reassignMatch = line.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
+            if (reassignMatch) {
+                const varName = reassignMatch[1];
+                const value = reassignMatch[2].trim();
+                
+                if (variableTypes.has(varName)) {
+                    const expectedType = variableTypes.get(varName)!;
+                    const actualType = this.inferType(value);
+                    
+                    if (actualType && !this.isTypeCompatible(expectedType, actualType)) {
+                        const varIndex = line.indexOf(varName);
+                        const range = new vscode.Range(i, varIndex, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                `Type mismatch: Cannot assign '${actualType}' to variable of type '${expectedType}'`,
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for comparison with incompatible types
+            const comparisonMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*(==|!=|<|>|<=|>=)\s*([a-zA-Z_][a-zA-Z0-9_]*|"[^"]*"|'[^']*'|\d+\.?\d*)/);
+            if (comparisonMatch) {
+                const left = comparisonMatch[1];
+                const right = comparisonMatch[3];
+                
+                if (variableTypes.has(left)) {
+                    const leftType = variableTypes.get(left)!;
+                    const rightType = this.inferType(right);
+                    
+                    if (rightType && !this.isTypeCompatible(leftType, rightType) && !this.isTypeCompatible(rightType, leftType)) {
+                        const range = new vscode.Range(i, 0, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                `Comparing incompatible types: '${leftType}' and '${rightType}'`,
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for division by zero
+            if (line.match(/\/\s*0(?![\.0-9])/)) {
+                const divIndex = line.indexOf('/ 0');
+                const range = new vscode.Range(i, divIndex, i, divIndex + 3);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        'Division by zero will cause runtime error',
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect unreachable code after return, break, continue, or throw
+     */
+    private detectUnreachableCode(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length - 1; i++) {
+            const line = lines[i].trim();
+            
+            // Check if line contains unconditional control flow statements
+            if (line.match(/^\s*(return|break|continue|throw)\b/) && !line.includes('//')) {
+                // Check next non-empty, non-comment line
+                for (let j = i + 1; j < lines.length; j++) {
+                    const nextLine = lines[j].trim();
+                    
+                    // Skip empty lines and comments
+                    if (!nextLine || nextLine.startsWith('//') || nextLine.startsWith('/*')) {
+                        continue;
+                    }
+                    
+                    // If we find 'end', 'elif', 'else', 'catch', 'finally', it's not unreachable
+                    if (nextLine.match(/^\s*(end|elif|else|catch|finally)\b/)) {
+                        break;
+                    }
+                    
+                    // Otherwise, this is unreachable code
+                    const range = new vscode.Range(j, 0, j, lines[j].length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            'Unreachable code detected',
+                            vscode.DiagnosticSeverity.Warning
+                        )
+                    );
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect usage of 'and', 'or', 'not' keywords which don't exist in Polyloft
+     */
+    private detectLogicalOperatorErrors(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for 'and' keyword (should be &&)
+            const andMatch = line.match(/\b(and)\b/);
+            if (andMatch && !line.trim().startsWith('//')) {
+                const andIndex = line.indexOf(' and ');
+                if (andIndex !== -1) {
+                    const range = new vscode.Range(i, andIndex + 1, i, andIndex + 4);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Use '&&' instead of 'and'. Polyloft does not have an 'and' keyword",
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+            }
+            
+            // Check for 'or' keyword (should be ||)
+            const orMatch = line.match(/\b(or)\b/);
+            if (orMatch && !line.trim().startsWith('//')) {
+                const orIndex = line.indexOf(' or ');
+                if (orIndex !== -1) {
+                    const range = new vscode.Range(i, orIndex + 1, i, orIndex + 3);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Use '||' instead of 'or'. Polyloft does not have an 'or' keyword",
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+            }
+            
+            // Check for 'not' keyword (should be !)
+            const notMatch = line.match(/\bnot\s+/);
+            if (notMatch && !line.trim().startsWith('//')) {
+                const notIndex = line.indexOf('not ');
+                if (notIndex !== -1) {
+                    const range = new vscode.Range(i, notIndex, i, notIndex + 3);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Use '!' instead of 'not'. Polyloft does not have a 'not' keyword",
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect incorrect range operator (.. instead of ...)
+     */
+    private detectRangeOperatorErrors(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for .. (two dots) which is not valid in Polyloft
+            const rangeTwoDotsMatch = line.match(/(\d+)\.\.(\d+)/);
+            if (rangeTwoDotsMatch && !line.trim().startsWith('//')) {
+                const rangeIndex = line.indexOf('..');
+                // Make sure it's not ... (three dots)
+                if (line[rangeIndex + 2] !== '.') {
+                    const range = new vscode.Range(i, rangeIndex, i, rangeIndex + 2);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Use '...' (three dots) for ranges, not '..' (two dots)",
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Detect issues with string interpolation
+     */
+    private detectStringInterpolationIssues(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for incorrect interpolation syntax (${} instead of #{})
+            const wrongInterpMatch = line.match(/\$\{[^}]+\}/);
+            if (wrongInterpMatch && !line.trim().startsWith('//')) {
+                const interpIndex = line.indexOf('${');
+                const range = new vscode.Range(i, interpIndex, i, interpIndex + 2);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '#{expression}' for string interpolation, not '${expression}'",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Warn about unescaped # in strings (might be intended interpolation)
+            const stringMatch = line.match(/"([^"]*#[^{][^"]*)"/);
+            if (stringMatch && !line.trim().startsWith('//')) {
+                const hashIndex = line.indexOf(stringMatch[1]);
+                if (hashIndex !== -1) {
+                    const range = new vscode.Range(i, hashIndex, i, hashIndex + stringMatch[1].length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            "Did you mean to use string interpolation? Use '#{expression}' syntax",
+                            vscode.DiagnosticSeverity.Hint
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Infer the type from a value or expression
+     */
+    private inferType(value: string): string | undefined {
+        value = value.trim();
+        
+        // String literals
+        if (value.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (value.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (value.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (value === 'true' || value === 'false') {
+            return 'Bool';
+        }
+        
+        // Nil/null
+        if (value === 'nil' || value === 'null') {
+            return 'Any';  // nil can be any type
+        }
+        
+        // Array literals
+        if (value.match(/^\[.*\]$/)) {
+            return 'Array';
+        }
+        
+        // Map literals
+        if (value.match(/^\{.*:.*\}$/)) {
+            return 'Map';
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Check if two types are compatible for assignment
+     */
+    private isTypeCompatible(targetType: string, sourceType: string): boolean {
+        // Exact match
+        if (targetType === sourceType) {
+            return true;
+        }
+        
+        // Any can accept anything
+        if (targetType === 'Any') {
+            return true;
+        }
+        
+        // Numeric promotions
+        if (targetType === 'Float' && sourceType === 'Int') {
+            return true;
+        }
+        if (targetType === 'Double' && (sourceType === 'Int' || sourceType === 'Float')) {
+            return true;
+        }
+        
+        return false;
     }
 
     private isInsideClassLikeStructure(lines: string[], currentLine: number): boolean {
