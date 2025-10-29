@@ -104,6 +104,17 @@
           }
         ],
         "description": "Converts value to boolean"
+      },
+      {
+        "name": "async",
+        "returnType": "Promise",
+        "parameters": [
+          {
+            "name": "function",
+            "type": "Function"
+          }
+        ],
+        "description": "Creates a Promise that executes the function asynchronously"
       }
     ],
     "classes": []
@@ -640,6 +651,27 @@
         {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if set is empty"},
         {"name": "clear", "returnType": "Void", "parameters": [], "description": "Removes all elements"},
         {"name": "toArray", "returnType": "Array", "parameters": [], "description": "Converts set to array"}
+      ]
+    },
+    "Promise": {
+      "type": "builtin-class",
+      "description": "Represents an asynchronous operation that will complete in the future",
+      "methods": [
+        {"name": "await", "returnType": "Any", "parameters": [], "description": "Waits for the promise to resolve and returns the result"},
+        {"name": "then", "returnType": "Promise", "parameters": [{"name": "onFulfilled", "type": "Function"}], "description": "Chains a callback to execute when the promise resolves"},
+        {"name": "catch", "returnType": "Promise", "parameters": [{"name": "onRejected", "type": "Function"}], "description": "Chains a callback to handle errors"},
+        {"name": "finally", "returnType": "Promise", "parameters": [{"name": "handler", "type": "Function"}], "description": "Executes code regardless of promise outcome"}
+      ]
+    },
+    "CompletableFuture": {
+      "type": "builtin-class",
+      "description": "Java-style CompletableFuture for more control over async operations",
+      "methods": [
+        {"name": "complete", "returnType": "Void", "parameters": [{"name": "value", "type": "Any"}], "description": "Complete the future with a value"},
+        {"name": "get", "returnType": "Any", "parameters": [], "description": "Wait for completion and get value"},
+        {"name": "getTimeout", "returnType": "Any", "parameters": [{"name": "milliseconds", "type": "Int"}], "description": "Wait with timeout"},
+        {"name": "isDone", "returnType": "Bool", "parameters": [], "description": "Check if completed"},
+        {"name": "cancel", "returnType": "Void", "parameters": [], "description": "Cancel the future"}
       ]
     }
   },

@@ -111,7 +111,17 @@ export class PolyloftLinter {
             }
 
             // Check for missing 'end' keyword after block statements
-            if (line.match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally)\b.*:\s*$/)) {
+            // But skip inline statements (single-line after :)
+            const blockMatch = line.match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally|switch|record|enum)\b.*:\s*(.*)$/);
+            if (blockMatch) {
+                const afterColon = blockMatch[2].trim();
+                
+                // Skip if it's an inline statement (has code after the colon)
+                if (afterColon && !afterColon.startsWith('//')) {
+                    // This is inline syntax, doesn't need 'end'
+                    continue;
+                }
+                
                 // Look for corresponding 'end'
                 let foundEnd = false;
                 for (let j = i + 1; j < lines.length; j++) {
@@ -122,17 +132,17 @@ export class PolyloftLinter {
                     // Stop searching if we hit another block start at same or lower indentation
                     const currentIndent = line.match(/^\s*/)?.[0].length || 0;
                     const checkIndent = lines[j].match(/^\s*/)?.[0].length || 0;
-                    if (checkIndent <= currentIndent && lines[j].match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally)\b/)) {
+                    if (checkIndent <= currentIndent && lines[j].match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally|switch|record|enum)\b/)) {
                         break;
                     }
                 }
-                if (!foundEnd && !line.match(/^\s*(else|elif):/)) {
+                if (!foundEnd && !line.match(/^\s*(else|elif|case|default):/)) {
                     
                     const range = new vscode.Range(i, 0, i, line.length);
                     diagnostics.push(
                         new vscode.Diagnostic(
                             range,
-                            'Block statement may be missing corresponding "end" keyword',
+                            'Multi-line block statement may be missing corresponding "end" keyword',
                             vscode.DiagnosticSeverity.Warning
                         )
                     );
@@ -424,6 +434,9 @@ export class PolyloftLinter {
         this.detectRangeOperatorErrors(lines, diagnostics);
         this.detectStringInterpolationIssues(lines, diagnostics);
         this.detectCasingIssues(lines, diagnostics);
+        this.validateForWhereClause(lines, diagnostics);
+        this.validateLambdaSyntax(lines, diagnostics);
+        this.validateSwitchCaseSyntax(lines, diagnostics);
 
         diagnosticCollection.set(document.uri, diagnostics);
     }
@@ -978,5 +991,161 @@ export class PolyloftLinter {
         }
 
         return true;
+    }
+
+    /**
+     * Enhanced: Validate for...where clause syntax
+     */
+    private validateForWhereClause(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for for...where syntax
+            const forWhereMatch = line.match(/^\s*for\s+(.+?)\s+in\s+(.+?)\s+where\s+(.+?):\s*(.*)$/);
+            if (forWhereMatch) {
+                const variable = forWhereMatch[1].trim();
+                const collection = forWhereMatch[2].trim();
+                const condition = forWhereMatch[3].trim();
+                const afterColon = forWhereMatch[4].trim();
+                
+                // Validate that where condition is not empty
+                if (!condition || condition.length === 0) {
+                    const range = new vscode.Range(i, 0, i, line.length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            'Where clause cannot be empty',
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
+                
+                // Check for common mistakes like using 'and' instead of '&&' in where clause
+                if (condition.match(/\band\b/)) {
+                    const andIndex = line.indexOf(' and ');
+                    if (andIndex !== -1) {
+                        const range = new vscode.Range(i, andIndex, i, andIndex + 5);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                "Use '&&' instead of 'and' in where clause",
+                                vscode.DiagnosticSeverity.Error
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for incorrect 'where' usage (not in for loop)
+            if (line.match(/^\s*where\s+/) && !line.match(/^\s*for\s+/)) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "'where' keyword can only be used with 'for' loops",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Validate lambda/arrow function syntax
+     */
+    private validateLambdaSyntax(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Check for lambda expressions: () => do ... end or () => expression
+            const lambdaMatch = line.match(/\(([^)]*)\)\s*=>\s*(do\b|.+)/);
+            if (lambdaMatch) {
+                const body = lambdaMatch[2];
+                
+                // If it starts with 'do', it must have a corresponding 'end'
+                if (body.trim() === 'do') {
+                    let foundEnd = false;
+                    for (let j = i + 1; j < lines.length; j++) {
+                        if (lines[j].match(/^\s*end\s*$/)) {
+                            foundEnd = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!foundEnd) {
+                        const range = new vscode.Range(i, 0, i, line.length);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                "Lambda expression with 'do' requires corresponding 'end'",
+                                vscode.DiagnosticSeverity.Warning
+                            )
+                        );
+                    }
+                }
+            }
+            
+            // Check for incorrect lambda syntax using {} instead of do...end
+            if (line.match(/=>\s*\{/)) {
+                const braceIndex = line.indexOf('=>');
+                const range = new vscode.Range(i, braceIndex, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Use '=> do...end' for multi-line lambda expressions, not '=>{}'. Polyloft doesn't use braces for blocks",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
+    }
+
+    /**
+     * Enhanced: Validate switch/case syntax
+     */
+    private validateSwitchCaseSyntax(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        let inSwitch = false;
+        let switchIndent = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const indent = line.match(/^\s*/)?.[0].length || 0;
+            
+            // Check for switch statement
+            if (line.match(/^\s*switch\s+/)) {
+                inSwitch = true;
+                switchIndent = indent;
+            }
+            
+            // Check for end of switch
+            if (inSwitch && line.match(/^\s*end\s*$/) && indent === switchIndent) {
+                inSwitch = false;
+            }
+            
+            // Check for case/default outside switch
+            if (!inSwitch && line.match(/^\s*(case|default)\s*:/)) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "'case' and 'default' can only be used inside 'switch' blocks",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+            
+            // Check for missing colon after case value
+            const caseMatch = line.match(/^\s*case\s+([^:]+)$/);
+            if (caseMatch && !line.includes(':')) {
+                const range = new vscode.Range(i, 0, i, line.length);
+                diagnostics.push(
+                    new vscode.Diagnostic(
+                        range,
+                        "Case statement must end with colon (:)",
+                        vscode.DiagnosticSeverity.Error
+                    )
+                );
+            }
+        }
     }
 }

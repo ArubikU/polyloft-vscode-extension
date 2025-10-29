@@ -206,6 +206,18 @@ The extension includes built-in support for:
 - `Crypto.base64Encode(data)`, `Crypto.base64Decode(data)` - Base64 encoding
 - `Crypto.hexEncode(data)`, `Crypto.hexDecode(data)` - Hex encoding
 
+**Promise Class:**
+- `async(function)` - Global function to create Promise
+- `promise.await()` - Wait for promise to resolve
+- `promise.then(onFulfilled)` - Chain callback
+- `promise.catch(onRejected)` - Handle errors
+- `promise.finally(handler)` - Cleanup code
+
+**CompletableFuture Class:**
+- `CompletableFuture()` - Constructor
+- `complete(value)`, `get()`, `getTimeout(milliseconds)`
+- `isDone()`, `cancel()`
+
 ## Usage
 
 1. Install the extension
