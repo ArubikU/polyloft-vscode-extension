@@ -36,12 +36,18 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         'var', 'let', 'const', 'final', 'def', 'class', 'interface', 'import',
         'implements', 'abstract', 'sealed', 'return', 'if', 'elif', 'else',
         'for', 'in', 'loop', 'break', 'continue', 'end', 'do', 'true', 'false',
-        'nil', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
+        'nil', 'null', 'thread', 'spawn', 'join', 'public', 'pub', 'private', 'priv',
         'protected', 'prot', 'static', 'this', 'super', 'instanceof', 'enum',
-        'record', 'try', 'catch', 'finally', 'throw'
+        'record', 'try', 'catch', 'finally', 'throw', 'defer', 'switch', 'case',
+        'default', 'where', 'from', 'as', 'export', 'extends', 'out'
     ];
 
-    private types = ['String', 'Int', 'Float', 'Double', 'Bool', 'Void', 'Array', 'Map', 'Any'];
+    private types = [
+        'String', 'Int', 'Float', 'Double', 'Bool', 'Void', 'Any',
+        'Array', 'Map', 'List', 'Set', 'Deque', 'Tuple', 'Pair',
+        'Range', 'Bytes', 'Promise', 'CompletableFuture',
+        'HttpServer', 'HttpRequest', 'HttpResponse'
+    ];
 
     private builtinPackages: BuiltinPackages | null = null;
 
@@ -189,6 +195,10 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
                 completionItems.push(item);
             });
         }
+
+        // Enhanced: Add useful code snippets
+        const snippets = this.provideEnhancedSnippets();
+        completionItems.push(...snippets);
 
         return completionItems;
     }
@@ -609,5 +619,170 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         }
 
         return completionItems;
+    }
+
+    /**
+     * Enhanced: Provide useful code snippets for common patterns
+     */
+    private provideEnhancedSnippets(): vscode.CompletionItem[] {
+        const snippets: vscode.CompletionItem[] = [];
+
+        // Class with constructor
+        const classSnippet = new vscode.CompletionItem('class', vscode.CompletionItemKind.Snippet);
+        classSnippet.insertText = new vscode.SnippetString(
+            'class ${1:ClassName}:\n' +
+            '\tlet ${2:field}\n' +
+            '\t\n' +
+            '\tdef init(${3:params}):\n' +
+            '\t\tthis.${2:field} = ${3:params}\n' +
+            '\tend\n' +
+            '\t\n' +
+            '\tdef ${4:methodName}():\n' +
+            '\t\t${0}\n' +
+            '\tend\n' +
+            'end'
+        );
+        classSnippet.detail = 'Create a class with constructor';
+        classSnippet.documentation = new vscode.MarkdownString('Creates a complete class with fields, constructor, and a method');
+        snippets.push(classSnippet);
+
+        // Record
+        const recordSnippet = new vscode.CompletionItem('record', vscode.CompletionItemKind.Snippet);
+        recordSnippet.insertText = new vscode.SnippetString(
+            'record ${1:Name}(${2:field1}: ${3:Type1}, ${4:field2}: ${5:Type2})\n' +
+            '\tdef ${6:methodName}():\n' +
+            '\t\t${0}\n' +
+            '\tend\n' +
+            'end'
+        );
+        recordSnippet.detail = 'Create a record with fields and method';
+        recordSnippet.documentation = new vscode.MarkdownString('Creates an immutable record type with automatic constructor');
+        snippets.push(recordSnippet);
+
+        // Enum
+        const enumSnippet = new vscode.CompletionItem('enum', vscode.CompletionItemKind.Snippet);
+        enumSnippet.insertText = new vscode.SnippetString(
+            'enum ${1:Name}\n' +
+            '\t${2:VALUE1}\n' +
+            '\t${3:VALUE2}\n' +
+            '\t${4:VALUE3}\n' +
+            'end'
+        );
+        enumSnippet.detail = 'Create an enumeration';
+        enumSnippet.documentation = new vscode.MarkdownString('Creates an enum with multiple values');
+        snippets.push(enumSnippet);
+
+        // Function
+        const funcSnippet = new vscode.CompletionItem('def', vscode.CompletionItemKind.Snippet);
+        funcSnippet.insertText = new vscode.SnippetString(
+            'def ${1:functionName}(${2:params})${3: -> ${4:ReturnType}}:\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        funcSnippet.detail = 'Create a function';
+        funcSnippet.documentation = new vscode.MarkdownString('Creates a function with parameters and optional return type');
+        snippets.push(funcSnippet);
+
+        // For loop with where
+        const forWhereSnippet = new vscode.CompletionItem('for where', vscode.CompletionItemKind.Snippet);
+        forWhereSnippet.insertText = new vscode.SnippetString(
+            'for ${1:item} in ${2:collection} where ${3:condition}:\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        forWhereSnippet.detail = 'For loop with where clause';
+        forWhereSnippet.documentation = new vscode.MarkdownString('Creates a for loop with a filtering where clause');
+        snippets.push(forWhereSnippet);
+
+        // For range
+        const forRangeSnippet = new vscode.CompletionItem('for range', vscode.CompletionItemKind.Snippet);
+        forRangeSnippet.insertText = new vscode.SnippetString(
+            'for ${1:i} in ${2:0}...${3:10}:\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        forRangeSnippet.detail = 'For loop with range';
+        forRangeSnippet.documentation = new vscode.MarkdownString('Creates a for loop iterating over a range (use ... for inclusive range)');
+        snippets.push(forRangeSnippet);
+
+        // If-elif-else
+        const ifElseSnippet = new vscode.CompletionItem('if else', vscode.CompletionItemKind.Snippet);
+        ifElseSnippet.insertText = new vscode.SnippetString(
+            'if ${1:condition}:\n' +
+            '\t${2}\n' +
+            'elif ${3:condition}:\n' +
+            '\t${4}\n' +
+            'else:\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        ifElseSnippet.detail = 'If-elif-else statement';
+        ifElseSnippet.documentation = new vscode.MarkdownString('Creates a complete if-elif-else conditional');
+        snippets.push(ifElseSnippet);
+
+        // Try-catch-finally
+        const tryCatchSnippet = new vscode.CompletionItem('try catch', vscode.CompletionItemKind.Snippet);
+        tryCatchSnippet.insertText = new vscode.SnippetString(
+            'try:\n' +
+            '\t${1:// risky operation}\n' +
+            'catch ${2:error}:\n' +
+            '\t${3:// handle error}\n' +
+            'finally:\n' +
+            '\t${0:// cleanup}\n' +
+            'end'
+        );
+        tryCatchSnippet.detail = 'Try-catch-finally block';
+        tryCatchSnippet.documentation = new vscode.MarkdownString('Creates a complete error handling block');
+        snippets.push(tryCatchSnippet);
+
+        // Switch statement
+        const switchSnippet = new vscode.CompletionItem('switch', vscode.CompletionItemKind.Snippet);
+        switchSnippet.insertText = new vscode.SnippetString(
+            'switch ${1:value}:\n' +
+            '\tcase ${2:value1}:\n' +
+            '\t\t${3}\n' +
+            '\tcase ${4:value2}:\n' +
+            '\t\t${5}\n' +
+            '\tdefault:\n' +
+            '\t\t${0}\n' +
+            'end'
+        );
+        switchSnippet.detail = 'Switch statement';
+        switchSnippet.documentation = new vscode.MarkdownString('Creates a switch-case statement with default');
+        snippets.push(switchSnippet);
+
+        // Main function template
+        const mainSnippet = new vscode.CompletionItem('main', vscode.CompletionItemKind.Snippet);
+        mainSnippet.insertText = new vscode.SnippetString(
+            '// Main entry point\n' +
+            'def main():\n' +
+            '\t${0:println("Hello, Polyloft!")}\n' +
+            'end\n' +
+            '\n' +
+            'main()'
+        );
+        mainSnippet.detail = 'Main function template';
+        mainSnippet.documentation = new vscode.MarkdownString('Creates a main function as entry point');
+        snippets.push(mainSnippet);
+
+        // Import statement
+        const importSnippet = new vscode.CompletionItem('import', vscode.CompletionItemKind.Snippet);
+        importSnippet.insertText = new vscode.SnippetString(
+            'import ${1:module.name} { ${2:Symbol1}, ${3:Symbol2} }'
+        );
+        importSnippet.detail = 'Import statement';
+        importSnippet.documentation = new vscode.MarkdownString('Imports specific symbols from a module');
+        snippets.push(importSnippet);
+
+        // String interpolation
+        const stringInterpSnippet = new vscode.CompletionItem('println interpolation', vscode.CompletionItemKind.Snippet);
+        stringInterpSnippet.insertText = new vscode.SnippetString(
+            'println("${1:text}: #{${2:variable}}")'
+        );
+        stringInterpSnippet.detail = 'Print with string interpolation';
+        stringInterpSnippet.documentation = new vscode.MarkdownString('Prints text with interpolated values using #{expression} syntax');
+        snippets.push(stringInterpSnippet);
+
+        return snippets;
     }
 }

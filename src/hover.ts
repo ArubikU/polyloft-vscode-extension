@@ -61,6 +61,12 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         const word = document.getText(wordRange);
         const line = document.lineAt(position.line).text;
 
+        // Enhanced: Check for language keywords and provide helpful information
+        const keywordInfo = this.getKeywordInfo(word);
+        if (keywordInfo) {
+            return new vscode.Hover(keywordInfo);
+        }
+
         // Check if it's a builtin function
         if (this.builtinPackages) {
             for (const func of this.builtinPackages.globals.functions) {
@@ -504,6 +510,199 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             if (fs.existsSync(filePath)) {
                 return vscode.Uri.file(filePath);
             }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Enhanced: Provide keyword hover information with examples
+     */
+    private getKeywordInfo(word: string): vscode.MarkdownString | undefined {
+        const keywords: { [key: string]: { description: string; example: string } } = {
+            'let': {
+                description: 'Declares a mutable variable that can be reassigned.',
+                example: 'let x = 10\nx = 20  // Valid'
+            },
+            'const': {
+                description: 'Declares a constant variable that cannot be reassigned.',
+                example: 'const PI = 3.14159\n// PI = 3.14  // Error: Cannot reassign const'
+            },
+            'final': {
+                description: 'Declares a final variable that cannot be reassigned (similar to const).',
+                example: 'final MAX_SIZE = 100\n// MAX_SIZE = 200  // Error: Cannot reassign final'
+            },
+            'var': {
+                description: 'Declares a mutable variable (legacy, prefer `let`).',
+                example: 'var count = 0\ncount = count + 1'
+            },
+            'def': {
+                description: 'Defines a function.',
+                example: 'def greet(name: String) -> String:\n    return "Hello, #{name}!"\nend'
+            },
+            'class': {
+                description: 'Defines a class.',
+                example: 'class Person:\n    let name\n    let age\n    \n    def init(name, age):\n        this.name = name\n        this.age = age\n    end\nend'
+            },
+            'interface': {
+                description: 'Defines an interface.',
+                example: 'interface Drawable:\n    def draw()\nend'
+            },
+            'enum': {
+                description: 'Defines an enumeration.',
+                example: 'enum Color\n    RED\n    GREEN\n    BLUE\nend'
+            },
+            'record': {
+                description: 'Defines an immutable record type with automatic constructor.',
+                example: 'record Point(x: Int, y: Int)\n    def distance():\n        return Math.sqrt(this.x * this.x + this.y * this.y)\n    end\nend'
+            },
+            'if': {
+                description: 'Conditional statement.',
+                example: 'if x > 10:\n    println("Greater than 10")\nend'
+            },
+            'elif': {
+                description: 'Else-if conditional branch.',
+                example: 'if x > 10:\n    println("Greater")\nelif x < 10:\n    println("Less")\nelse:\n    println("Equal")\nend'
+            },
+            'else': {
+                description: 'Else branch for conditional statements.',
+                example: 'if condition:\n    // do something\nelse:\n    // do something else\nend'
+            },
+            'for': {
+                description: 'Iteration loop. Use `where` clause for filtering.',
+                example: 'for i in 0...10:\n    println(i)\nend\n\n// With where clause\nfor n in numbers where n > 5:\n    println(n)\nend'
+            },
+            'loop': {
+                description: 'Infinite loop (use break to exit).',
+                example: 'loop:\n    if condition:\n        break\n    end\nend'
+            },
+            'where': {
+                description: 'Filter clause for for loops.',
+                example: 'for item in collection where item.active:\n    process(item)\nend'
+            },
+            'break': {
+                description: 'Exits the current loop.',
+                example: 'for i in 0...100:\n    if i > 10:\n        break\n    end\nend'
+            },
+            'continue': {
+                description: 'Skips to the next iteration of the loop.',
+                example: 'for i in 0...10:\n    if i % 2 == 0:\n        continue\n    end\n    println(i)  // Only odd numbers\nend'
+            },
+            'return': {
+                description: 'Returns a value from a function.',
+                example: 'def add(a, b):\n    return a + b\nend'
+            },
+            'import': {
+                description: 'Imports symbols from another module.',
+                example: 'import math.vector { Vec2, Vec3 }\nimport utils { Logger }'
+            },
+            'this': {
+                description: 'References the current instance in a class, enum, or record.',
+                example: 'class MyClass:\n    let value\n    \n    def setValue(v):\n        this.value = v\n    end\nend'
+            },
+            'super': {
+                description: 'References the parent class.',
+                example: 'class Child < Parent:\n    def init():\n        super.init()\n    end\nend'
+            },
+            'try': {
+                description: 'Begins a try-catch-finally block for error handling.',
+                example: 'try:\n    riskyOperation()\ncatch e:\n    println("Error: #{e}")\nfinally:\n    cleanup()\nend'
+            },
+            'catch': {
+                description: 'Catches exceptions in a try block.',
+                example: 'try:\n    riskyOperation()\ncatch error:\n    handleError(error)\nend'
+            },
+            'finally': {
+                description: 'Executes code after try-catch regardless of exceptions.',
+                example: 'try:\n    openFile()\ncatch e:\n    handleError(e)\nfinally:\n    closeFile()  // Always executes\nend'
+            },
+            'throw': {
+                description: 'Throws an exception.',
+                example: 'if value < 0:\n    throw "Value must be positive"\nend'
+            },
+            'defer': {
+                description: 'Defers execution until the current scope exits.',
+                example: 'def processFile():\n    let file = openFile("data.txt")\n    defer file.close()  // Called when function exits\n    // process file\nend'
+            },
+            'switch': {
+                description: 'Multi-way branch statement.',
+                example: 'switch value:\n    case 1:\n        println("One")\n    case 2:\n        println("Two")\n    default:\n        println("Other")\nend'
+            },
+            'static': {
+                description: 'Declares a static member that belongs to the class, not instances.',
+                example: 'class Math:\n    static PI = 3.14159\n    \n    static def square(x):\n        return x * x\n    end\nend'
+            },
+            'abstract': {
+                description: 'Declares an abstract class or method that must be implemented by subclasses.',
+                example: 'abstract class Shape:\n    abstract def area()\nend'
+            },
+            'sealed': {
+                description: 'Prevents a class from being inherited.',
+                example: 'sealed class FinalClass:\n    // Cannot be extended\nend'
+            },
+            'instanceof': {
+                description: 'Checks if an object is an instance of a class.',
+                example: 'if obj instanceof MyClass:\n    println("Is instance")\nend'
+            },
+            'true': {
+                description: 'Boolean true value.',
+                example: 'let isActive = true'
+            },
+            'false': {
+                description: 'Boolean false value.',
+                example: 'let isActive = false'
+            },
+            'nil': {
+                description: 'Null value (absence of value).',
+                example: 'let value = nil'
+            },
+            'null': {
+                description: 'Null value (absence of value).',
+                example: 'let value = null'
+            },
+            'end': {
+                description: 'Closes a block (class, function, if, loop, etc.).',
+                example: 'if condition:\n    // code\nend'
+            },
+            'in': {
+                description: 'Used in for loops to iterate over collections.',
+                example: 'for item in collection:\n    println(item)\nend'
+            },
+            'public': {
+                description: 'Makes a member accessible from anywhere.',
+                example: 'class MyClass:\n    public let value\nend'
+            },
+            'pub': {
+                description: 'Short form of public.',
+                example: 'pub def myFunction():\nend'
+            },
+            'private': {
+                description: 'Makes a member accessible only within the class.',
+                example: 'class MyClass:\n    private let secret\nend'
+            },
+            'priv': {
+                description: 'Short form of private.',
+                example: 'priv def internalMethod():\nend'
+            },
+            'protected': {
+                description: 'Makes a member accessible within the class and subclasses.',
+                example: 'class MyClass:\n    protected let value\nend'
+            },
+            'prot': {
+                description: 'Short form of protected.',
+                example: 'prot def helperMethod():\nend'
+            }
+        };
+
+        const info = keywords[word];
+        if (info) {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendMarkdown(`**\`${word}\`** keyword\n\n`);
+            markdown.appendMarkdown(info.description + '\n\n');
+            markdown.appendMarkdown('**Example:**\n');
+            markdown.appendCodeblock(info.example, 'polyloft');
+            markdown.isTrusted = true;
+            return markdown;
         }
 
         return undefined;
