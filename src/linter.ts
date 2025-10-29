@@ -455,6 +455,11 @@ export class PolyloftLinter {
                 continue;
             }
             
+            // Skip import statements - they can have lowercase paths like "test.math.vector"
+            if (line.trim().match(/^\s*import\s+/)) {
+                continue;
+            }
+            
             // Check for lowercase builtin classes
             for (const className of builtinClasses) {
                 const lowerCase = className.toLowerCase();

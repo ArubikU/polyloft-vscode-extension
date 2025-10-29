@@ -67,6 +67,12 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         const word = document.getText(wordRange);
         const line = document.lineAt(position.line).text;
 
+        // Check if hovering over an import statement
+        const importHover = await this.getImportHover(document, position, line, word);
+        if (importHover) {
+            return importHover;
+        }
+
         // Enhanced: Check for language keywords and provide helpful information
         const keywordInfo = this.getKeywordInfo(word);
         if (keywordInfo) {
@@ -740,6 +746,104 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             markdown.appendCodeblock(info.example, 'polyloft');
             markdown.isTrusted = true;
             return markdown;
+        }
+
+        return undefined;
+    }
+
+    private async getImportHover(
+        document: vscode.TextDocument,
+        position: vscode.Position,
+        line: string,
+        word: string
+    ): Promise<vscode.Hover | undefined> {
+        // Check if the line is an import statement - use same pattern as syntax file
+        const importMatch = line.match(/^\s*import\s+([a-zA-Z_][a-zA-Z0-9_.\/]*)(?:\s*\{([^}]*)\})?/);
+        if (!importMatch) {
+            return undefined;
+        }
+
+        const importPath = importMatch[1];
+        const importedSymbols = importMatch[2] ? importMatch[2].split(',').map(s => s.trim()) : [];
+
+        // Check if we're hovering over the import keyword
+        if (word === 'import') {
+            const markdown = new vscode.MarkdownString();
+            markdown.appendMarkdown(`**\`import\`** statement\n\n`);
+            markdown.appendMarkdown(`Imports symbols from module: \`${importPath}\`\n\n`);
+            if (importedSymbols.length > 0) {
+                markdown.appendMarkdown(`**Imported symbols:** ${importedSymbols.join(', ')}\n\n`);
+            }
+            return new vscode.Hover(markdown);
+        }
+
+        // Check if we're hovering over the import path or a symbol
+        if (line.indexOf(word) !== -1) {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+            if (!workspaceFolder) {
+                return undefined;
+            }
+
+            const basePath = workspaceFolder.uri.fsPath;
+            const parts = importPath.split('.');
+            
+            // Try to resolve the import path
+            const possiblePaths = [
+                path.join(basePath, 'libs', ...parts, 'index.pf'),
+                path.join(basePath, 'libs', ...parts.slice(0, -1), `${parts[parts.length - 1]}.pf`),
+                path.join(basePath, 'src', ...parts, 'index.pf'),
+                path.join(basePath, 'src', ...parts.slice(0, -1), `${parts[parts.length - 1]}.pf`),
+                path.join(basePath, ...parts, 'index.pf'),
+                path.join(basePath, ...parts.slice(0, -1), `${parts[parts.length - 1]}.pf`),
+            ];
+
+            let resolvedPath: string | undefined;
+            let sourceLocation = 'unknown location';
+
+            // Use async file system operations
+            for (const filePath of possiblePaths) {
+                try {
+                    const fileUri = vscode.Uri.file(filePath);
+                    await vscode.workspace.fs.stat(fileUri);
+                    resolvedPath = filePath;
+                    
+                    // Determine if it's from libs, src, or other
+                    if (filePath.includes(`${path.sep}libs${path.sep}`)) {
+                        sourceLocation = 'lib (standard library)';
+                    } else if (filePath.includes(`${path.sep}src${path.sep}`)) {
+                        sourceLocation = 'src (project source)';
+                    } else {
+                        sourceLocation = 'project root';
+                    }
+                    break;
+                } catch {
+                    // File doesn't exist, continue to next path
+                    continue;
+                }
+            }
+
+            const markdown = new vscode.MarkdownString();
+            markdown.appendMarkdown(`**Import:** \`${importPath}\`\n\n`);
+            
+            if (resolvedPath) {
+                const relativePath = path.relative(basePath, resolvedPath);
+                markdown.appendMarkdown(`**Location:** ${sourceLocation}\n\n`);
+                markdown.appendMarkdown(`**File:** \`${relativePath}\`\n\n`);
+                
+                // Make it clickable
+                const fileUri = vscode.Uri.file(resolvedPath);
+                markdown.appendMarkdown(`[Open file](${fileUri.toString()})\n\n`);
+                markdown.isTrusted = true;
+            } else {
+                markdown.appendMarkdown(`**Status:** ⚠️ File not found\n\n`);
+                markdown.appendMarkdown(`Searched in: libs/, src/, and project root\n\n`);
+            }
+
+            if (importedSymbols.length > 0 && importedSymbols.includes(word)) {
+                markdown.appendMarkdown(`**Imported symbol:** \`${word}\`\n\n`);
+            }
+
+            return new vscode.Hover(markdown);
         }
 
         return undefined;
