@@ -673,6 +673,18 @@
         {"name": "isDone", "returnType": "Bool", "parameters": [], "description": "Check if completed"},
         {"name": "cancel", "returnType": "Void", "parameters": [], "description": "Cancel the future"}
       ]
+    },
+    "Bytes": {
+      "type": "builtin-class",
+      "description": "Represents binary data with byte manipulation methods",
+      "methods": [
+        {"name": "size", "returnType": "Int", "parameters": [], "description": "Returns the number of bytes"},
+        {"name": "get", "returnType": "Int", "parameters": [{"name": "index", "type": "Int"}], "description": "Gets the byte value at index (0-255)"},
+        {"name": "set", "returnType": "Void", "parameters": [{"name": "index", "type": "Int"}, {"name": "value", "type": "Int"}], "description": "Sets the byte value at index"},
+        {"name": "toString", "returnType": "String", "parameters": [], "description": "Converts bytes to string"},
+        {"name": "asString", "returnType": "String", "parameters": [], "description": "Alias for toString()"},
+        {"name": "toArray", "returnType": "Array", "parameters": [], "description": "Converts bytes to array of integers"}
+      ]
     }
   },
   "standardLibrary": {

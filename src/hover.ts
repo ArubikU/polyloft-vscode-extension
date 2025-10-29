@@ -716,6 +716,18 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             'prot': {
                 description: 'Short form of protected.',
                 example: 'prot def helperMethod():\nend'
+            },
+            'implements': {
+                description: 'Declares that a class implements an interface.',
+                example: 'class MyClass implements Drawable:\n    @Override\n    def draw():\n        println("Drawing")\n    end\nend'
+            },
+            '@Override': {
+                description: 'Annotation marking methods that override parent class methods or implement interface methods.',
+                example: 'class Dog < Animal:\n    @Override\n    def speak():\n        println("Woof!")\n    end\nend'
+            },
+            '@Deprecated': {
+                description: 'Annotation marking deprecated methods or classes.',
+                example: '@Deprecated\ndef oldMethod():\n    println("Use newMethod instead")\nend'
             }
         };
 

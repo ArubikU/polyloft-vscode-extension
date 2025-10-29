@@ -71,6 +71,7 @@ The extension provides powerful code snippets for rapid development:
 - **`class`**: Complete class template with constructor and methods
 - **`record`**: Record definition with fields and methods
 - **`enum`**: Enumeration with multiple values
+- **`interface`**: Interface definition
 - **`def`**: Function with parameters and return type
 - **`for where`**: For loop with filtering where clause
 - **`for range`**: For loop with range iteration
@@ -79,6 +80,20 @@ The extension provides powerful code snippets for rapid development:
 - **`switch`**: Switch-case statement with default
 - **`main`**: Main function template as entry point
 - **`import`**: Import statement with symbols
+- **`@Override`**: Override annotation with method
+- **`thread spawn`**: Background thread block
+- **`async await`**: Async/await promise pattern
+
+### Builtin Interfaces
+- **Iterable**: `__length()`, `__get(index)` - Make objects iterable in for loops
+- **Unstructured**: `__pieces()`, `__get_piece(index)` - Enable destructuring
+- **Sliceable**: `__slice(start, end)` - Support slice operations
+- **Mappable**: `__get(key)`, `__set(key, value)`, `__contains(key)` - Map-like access
+- **Indexable**: `__length()`, `__get(index)` - Array-like indexing
+
+### Annotations
+- **@Override**: Marks methods overriding parent/interface methods
+- **@Deprecated**: Marks deprecated code
 
 ### Type Safety
 - Basic type inference for variable declarations
@@ -182,6 +197,11 @@ The extension includes built-in support for:
 - `add(element)`, `remove(element)`, `delete(element)`
 - `has(element)`, `contains(element)`, `size()`, `length()`
 - `isEmpty()`, `clear()`, `toArray()`
+
+**Bytes Class:**
+- `Bytes()`, `Bytes(string)`, `Bytes(array)` - Constructors
+- `size()`, `get(index)`, `set(index, value)`
+- `toString()`, `asString()`, `toArray()`
 
 **Http Module:**
 - `Http.get(url, options?)` - Make GET request

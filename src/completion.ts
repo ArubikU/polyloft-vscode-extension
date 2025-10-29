@@ -807,6 +807,53 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         stringInterpSnippet.documentation = new vscode.MarkdownString('Prints text with interpolated values using #{expression} syntax');
         snippets.push(stringInterpSnippet);
 
+        // Interface
+        const interfaceSnippet = new vscode.CompletionItem('interface', vscode.CompletionItemKind.Snippet);
+        interfaceSnippet.insertText = new vscode.SnippetString(
+            'interface ${1:Name}:\n' +
+            '\t${2:methodName}(${3:params}) -> ${4:ReturnType}\n' +
+            'end'
+        );
+        interfaceSnippet.detail = 'Create an interface';
+        interfaceSnippet.documentation = new vscode.MarkdownString('Creates an interface definition');
+        snippets.push(interfaceSnippet);
+
+        // @Override annotation
+        const overrideSnippet = new vscode.CompletionItem('@Override', vscode.CompletionItemKind.Snippet);
+        overrideSnippet.insertText = new vscode.SnippetString(
+            '@Override\n' +
+            'def ${1:methodName}(${2:params}):\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        overrideSnippet.detail = '@Override annotation with method';
+        overrideSnippet.documentation = new vscode.MarkdownString('Creates an override method with annotation');
+        snippets.push(overrideSnippet);
+
+        // Thread spawn
+        const threadSnippet = new vscode.CompletionItem('thread spawn', vscode.CompletionItemKind.Snippet);
+        threadSnippet.insertText = new vscode.SnippetString(
+            'thread spawn do\n' +
+            '\t${0}\n' +
+            'end'
+        );
+        threadSnippet.detail = 'Spawn a thread';
+        threadSnippet.documentation = new vscode.MarkdownString('Creates a background thread');
+        snippets.push(threadSnippet);
+
+        // Async promise
+        const asyncSnippet = new vscode.CompletionItem('async await', vscode.CompletionItemKind.Snippet);
+        asyncSnippet.insertText = new vscode.SnippetString(
+            'let promise = async(() => do\n' +
+            '\t${1:// async code}\n' +
+            '\treturn ${2:result}\n' +
+            'end)\n' +
+            'let ${3:result} = promise.await()'
+        );
+        asyncSnippet.detail = 'Async/await pattern';
+        asyncSnippet.documentation = new vscode.MarkdownString('Creates async promise with await');
+        snippets.push(asyncSnippet);
+
         return snippets;
     }
 }
