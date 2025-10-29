@@ -91,6 +91,7 @@ The extension provides powerful code snippets for rapid development:
   - Using `and`/`or`/`not` instead of `&&`/`||`/`!`
   - Using `..` instead of `...` for ranges
   - Using `${}` instead of `#{}` for string interpolation
+  - **Incorrect casing**: `sys.time()` should be `Sys.time()`, `PRINTLN()` should be `println()`
   - Division by zero
   - Unreachable code after control flow statements
 
@@ -99,6 +100,7 @@ The extension provides powerful code snippets for rapid development:
 - Type annotation recommendations
 - Indentation consistency hints
 - Unused import detection
+- Builtin function and class casing validation
 
 ## Configuration
 
@@ -109,7 +111,9 @@ The extension can be configured through VS Code settings:
   "polyloft.linting.enabled": true,
   "polyloft.linting.onType": true,
   "polyloft.completion.enabled": true,
-  "polyloft.trace.server": "off"
+  "polyloft.trace.server": "off",
+  "polyloft.interpreterPath": "polyloft"
+}
 }
 ```
 
@@ -145,9 +149,10 @@ The extension includes built-in support for:
 
 ### Built-in Classes
 - `Sys`, `Math`, `Array`, `String`, `Map`, `Set`, `List`
+- `Http`, `IO`, `Crypto`, `Regex`
 - `Tuple`, `Deque`, `Range`, `Bytes`
 - `Generic`, `Object`, `Cronometer`
-- `Net`, `Http`, `IO`, `File`, `Socket`
+- `Net`, `File`, `Socket`
 - `Promise`, `CompletableFuture`
 
 ### Built-in Class Methods
@@ -170,17 +175,53 @@ The extension includes built-in support for:
 - `has(key)`, `hasKey(key)`, `remove(key)`, `delete(key)`
 - `clear()`, `size()`, `length()`, `isEmpty()`
 - `keys()`, `values()`, `entries()`
+- `serialize()` - Convert to JSON string
+- Static: `Map.deserialize(jsonString)` - Parse JSON
 
 **Set Methods:**
 - `add(element)`, `remove(element)`, `delete(element)`
 - `has(element)`, `contains(element)`, `size()`, `length()`
 - `isEmpty()`, `clear()`, `toArray()`
 
+**Http Module:**
+- `Http.get(url, options?)` - Make GET request
+- `Http.post(url, body, options?)` - Make POST request
+- `Http.put(url, body, options?)` - Make PUT request
+- `Http.delete(url, options?)` - Make DELETE request
+- `Http.request(method, url, options)` - Custom HTTP request
+- `Http.createServer()` - Create HTTP server
+
+**IO Module:**
+- `IO.readFile(path, encoding?)` - Read file
+- `IO.writeFile(path, content, encoding?)` - Write file
+- `IO.appendFile(path, content)` - Append to file
+- `IO.exists(path)` - Check if file/dir exists
+- `IO.delete(path)` - Delete file
+- `IO.mkdir(path)` - Create directory
+- `IO.readDir(path)` - List directory contents
+- `IO.isFile(path)`, `IO.isDir(path)` - Check path type
+
+**Crypto Module:**
+- `Crypto.md5(data)`, `Crypto.sha1(data)`, `Crypto.sha256(data)`, `Crypto.sha512(data)` - Hash functions
+- `Crypto.base64Encode(data)`, `Crypto.base64Decode(data)` - Base64 encoding
+- `Crypto.hexEncode(data)`, `Crypto.hexDecode(data)` - Hex encoding
+
 ## Usage
 
 1. Install the extension
-2. Open any `.pf` file
+2. Open any `.pf` or `.pfx` file
 3. Start coding with full IntelliSense support
+4. **Run your code**: Click the play button (▶) in the editor title bar or press `Ctrl+Alt+N` (`Cmd+Alt+N` on Mac)
+
+### Running Polyloft Files
+
+The extension includes a "Run File" feature similar to Python extensions:
+- **Play Button**: Appears in the editor title bar when editing `.pf` files
+- **Keyboard Shortcut**: `Ctrl+Alt+N` (Windows/Linux) or `Cmd+Alt+N` (Mac)
+- **Right-Click Menu**: "Run Polyloft File" in the context menu
+- **Output**: Results appear in the "Polyloft" output channel
+
+**Configuration**: Set `polyloft.interpreterPath` in settings if Polyloft CLI is not in your PATH.
 
 ## Language Examples
 

@@ -423,8 +423,67 @@ export class PolyloftLinter {
         this.detectLogicalOperatorErrors(lines, diagnostics);
         this.detectRangeOperatorErrors(lines, diagnostics);
         this.detectStringInterpolationIssues(lines, diagnostics);
+        this.detectCasingIssues(lines, diagnostics);
 
         diagnosticCollection.set(document.uri, diagnostics);
+    }
+
+    /**
+     * Enhanced: Detect common casing mistakes and suggest corrections
+     */
+    private detectCasingIssues(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const builtinClasses = ['Sys', 'Math', 'String', 'Array', 'Map', 'Set', 'List', 'Http', 'IO', 'Crypto', 'Regex'];
+        const builtinFunctions = ['println', 'print', 'len', 'range', 'int', 'float', 'str', 'bool'];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.trim().startsWith('//')) {
+                continue;
+            }
+            
+            // Check for lowercase builtin classes
+            for (const className of builtinClasses) {
+                const lowerCase = className.toLowerCase();
+                const pattern = new RegExp(`\\b${lowerCase}\\b(?!\\s*:)`, 'gi');
+                let match;
+                
+                while ((match = pattern.exec(line)) !== null) {
+                    // Skip if it's the correct casing
+                    if (match[0] === className) {
+                        continue;
+                    }
+                    
+                    const range = new vscode.Diagnostic(
+                        new vscode.Range(i, match.index, i, match.index + match[0].length),
+                        `Use '${className}' instead of '${match[0]}'. Built-in class names must start with uppercase`,
+                        vscode.DiagnosticSeverity.Error
+                    );
+                    diagnostics.push(range);
+                }
+            }
+            
+            // Check for uppercase builtin functions
+            for (const funcName of builtinFunctions) {
+                const upperCase = funcName.toUpperCase();
+                const titleCase = funcName.charAt(0).toUpperCase() + funcName.slice(1);
+                const patterns = [upperCase, titleCase];
+                
+                for (const wrongCase of patterns) {
+                    const pattern = new RegExp(`\\b${wrongCase}\\s*\\(`, 'g');
+                    let match;
+                    
+                    while ((match = pattern.exec(line)) !== null) {
+                        const range = new vscode.Diagnostic(
+                            new vscode.Range(i, match.index, i, match.index + wrongCase.length),
+                            `Use '${funcName}' instead of '${wrongCase}'. Built-in functions must be lowercase`,
+                            vscode.DiagnosticSeverity.Error
+                        );
+                        diagnostics.push(range);
+                    }
+                }
+            }
+        }
     }
 
     /**

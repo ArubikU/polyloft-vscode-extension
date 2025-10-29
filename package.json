@@ -76,9 +76,45 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the language server"
+        },
+        "polyloft.interpreterPath": {
+          "type": "string",
+          "default": "polyloft",
+          "description": "Path to the Polyloft CLI executable (default: 'polyloft')"
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "polyloft.runFile",
+        "title": "Run Polyloft File",
+        "icon": "$(play)"
+      }
+    ],
+    "menus": {
+      "editor/title/run": [
+        {
+          "command": "polyloft.runFile",
+          "when": "resourceLangId == polyloft",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "polyloft.runFile",
+          "when": "resourceLangId == polyloft",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "polyloft.runFile",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
+        "when": "editorTextFocus && resourceLangId == polyloft"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

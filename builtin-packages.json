@@ -510,6 +510,47 @@
         }
       ]
     },
+    "Http": {
+      "type": "builtin",
+      "description": "HTTP client and server functionality",
+      "functions": [
+        {"name": "get", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a GET request"},
+        {"name": "post", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "body", "type": "Any"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a POST request"},
+        {"name": "put", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "body", "type": "Any"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a PUT request"},
+        {"name": "delete", "returnType": "Map", "parameters": [{"name": "url", "type": "String"}, {"name": "options", "type": "Map", "optional": true}], "description": "Makes a DELETE request"},
+        {"name": "request", "returnType": "Map", "parameters": [{"name": "method", "type": "String"}, {"name": "url", "type": "String"}, {"name": "options", "type": "Map"}], "description": "Makes a custom HTTP request"},
+        {"name": "createServer", "returnType": "HttpServer", "parameters": [], "description": "Creates an HTTP server instance"}
+      ]
+    },
+    "IO": {
+      "type": "builtin",
+      "description": "File and directory operations",
+      "functions": [
+        {"name": "readFile", "returnType": "String", "parameters": [{"name": "path", "type": "String"}, {"name": "encoding", "type": "String", "optional": true}], "description": "Reads entire file content"},
+        {"name": "writeFile", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}, {"name": "content", "type": "String"}, {"name": "encoding", "type": "String", "optional": true}], "description": "Writes content to file"},
+        {"name": "appendFile", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}, {"name": "content", "type": "String"}], "description": "Appends content to file"},
+        {"name": "exists", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if file or directory exists"},
+        {"name": "delete", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}], "description": "Deletes a file"},
+        {"name": "mkdir", "returnType": "Void", "parameters": [{"name": "path", "type": "String"}], "description": "Creates a directory"},
+        {"name": "readDir", "returnType": "Array", "parameters": [{"name": "path", "type": "String"}], "description": "Lists directory contents"},
+        {"name": "isFile", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if path is a file"},
+        {"name": "isDir", "returnType": "Bool", "parameters": [{"name": "path", "type": "String"}], "description": "Checks if path is a directory"}
+      ]
+    },
+    "Crypto": {
+      "type": "builtin",
+      "description": "Cryptographic hashing and encoding functions",
+      "functions": [
+        {"name": "md5", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes MD5 hash (hex-encoded)"},
+        {"name": "sha1", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-1 hash (hex-encoded)"},
+        {"name": "sha256", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-256 hash (hex-encoded)"},
+        {"name": "sha512", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Computes SHA-512 hash (hex-encoded)"},
+        {"name": "base64Encode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Encodes data to Base64"},
+        {"name": "base64Decode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Decodes Base64 data"},
+        {"name": "hexEncode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Encodes data to hexadecimal"},
+        {"name": "hexDecode", "returnType": "String", "parameters": [{"name": "data", "type": "String"}], "description": "Decodes hexadecimal data"}
+      ]
+    },
     "String": {
       "type": "builtin-class",
       "description": "Immutable string type with text manipulation methods",
@@ -578,7 +619,11 @@
         {"name": "isEmpty", "returnType": "Bool", "parameters": [], "description": "Checks if map is empty"},
         {"name": "keys", "returnType": "Array", "parameters": [], "description": "Returns array of all keys"},
         {"name": "values", "returnType": "Array", "parameters": [], "description": "Returns array of all values"},
-        {"name": "entries", "returnType": "Array", "parameters": [], "description": "Returns array of [key, value] pairs"}
+        {"name": "entries", "returnType": "Array", "parameters": [], "description": "Returns array of [key, value] pairs"},
+        {"name": "serialize", "returnType": "String", "parameters": [], "description": "Converts Map to JSON string"}
+      ],
+      "functions": [
+        {"name": "deserialize", "returnType": "Map", "parameters": [{"name": "jsonString", "type": "String"}], "description": "Parses JSON string into Map"}
       ]
     },
     "Set": {
