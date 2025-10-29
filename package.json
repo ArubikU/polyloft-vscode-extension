@@ -4,6 +4,7 @@
   "description": "Language support for Polyloft programming language including syntax highlighting, linting, and auto-completion",
   "version": "0.1.2",
   "publisher": "polyloft",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
