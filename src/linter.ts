@@ -599,7 +599,7 @@ export class PolyloftLinter {
             let notMatch;
             const notRegex = /\bnot\s+/g;
             while ((notMatch = notRegex.exec(line)) !== null) {
-                const range = new vscode.Range(i, notMatch.index, i, notMatch.index + 3);
+                const range = new vscode.Range(i, notMatch.index, i, notMatch.index + notMatch[0].length);
                 diagnostics.push(
                     new vscode.Diagnostic(
                         range,
@@ -627,9 +627,9 @@ export class PolyloftLinter {
             const rangeRegex = /(\d+)\.\.(\d+)/g;
             while ((rangeTwoDotsMatch = rangeRegex.exec(line)) !== null) {
                 // Make sure it's not ... (three dots)
-                if (line[rangeTwoDotsMatch.index + rangeTwoDotsMatch[0].indexOf('..') + 2] !== '.') {
-                    const dotIndex = rangeTwoDotsMatch.index + rangeTwoDotsMatch[0].indexOf('..');
-                    const range = new vscode.Range(i, dotIndex, i, dotIndex + 2);
+                const dotPosition = rangeTwoDotsMatch.index + rangeTwoDotsMatch[1].length;
+                if (line[dotPosition + 2] !== '.') {
+                    const range = new vscode.Range(i, dotPosition, i, dotPosition + 2);
                     diagnostics.push(
                         new vscode.Diagnostic(
                             range,
