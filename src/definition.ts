@@ -15,17 +15,19 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         const importLineMatch = lineText.match(/^\s*import\s+([a-zA-Z._\/]+)\s*\{/);
         if (importLineMatch) {
             const importPath = importLineMatch[1];
-            // Use the match index to find the exact position of the import path
+            // Use the match to find the exact position - the path starts after "import "
             const importKeywordMatch = lineText.match(/^\s*import\s+/);
-            const importPathStart = importKeywordMatch ? importKeywordMatch[0].length : lineText.indexOf(importPath);
-            const importPathEnd = importPathStart + importPath.length;
-            
-            // Check if cursor is within the import path
-            if (position.character >= importPathStart && position.character <= importPathEnd) {
-                // Try to open the imported file
-                const location = await this.resolveImport(document, importPath, undefined);
-                if (location) {
-                    return location;
+            if (importKeywordMatch) {
+                const importPathStart = importKeywordMatch[0].length;
+                const importPathEnd = importPathStart + importPath.length;
+                
+                // Check if cursor is within the import path
+                if (position.character >= importPathStart && position.character <= importPathEnd) {
+                    // Try to open the imported file
+                    const location = await this.resolveImport(document, importPath, undefined);
+                    if (location) {
+                        return location;
+                    }
                 }
             }
         }
