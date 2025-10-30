@@ -3,3 +3,4 @@ out/
 *.vsix
 .vscode-test/
 builtin-packages.json.bak
+test-samples/

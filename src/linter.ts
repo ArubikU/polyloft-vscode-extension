@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 
 interface Token {
     type: string;
@@ -96,19 +98,8 @@ export class PolyloftLinter {
                 );
             }
 
-            // Check for unmatched brackets
-            const openBrackets = (line.match(/\{/g) || []).length;
-            const closeBrackets = (line.match(/\}/g) || []).length;
-            if (openBrackets !== closeBrackets) {
-                const range = new vscode.Range(i, 0, i, line.length);
-                diagnostics.push(
-                    new vscode.Diagnostic(
-                        range,
-                        'Unmatched brackets',
-                        vscode.DiagnosticSeverity.Warning
-                    )
-                );
-            }
+            // Skip line-by-line bracket checking for multi-line structures
+            // We'll do a global bracket check after the loop instead
 
             // Check for missing 'end' keyword after block statements
             // But skip inline statements (single-line after :)
@@ -122,22 +113,44 @@ export class PolyloftLinter {
                     continue;
                 }
                 
-                // Look for corresponding 'end'
+                // Look for corresponding 'end', 'elif', or 'else'
                 let foundEnd = false;
+                let foundElifOrElse = false;
                 for (let j = i + 1; j < lines.length; j++) {
-                    if (lines[j].match(/^\s*end\s*$/)) {
+                    const currentIndent = line.match(/^\s*/)?.[0].length || 0;
+                    const checkIndent = lines[j].match(/^\s*/)?.[0].length || 0;
+                    const checkLine = lines[j].trim();
+                    
+                    // If we find 'end' at the same indentation, we're good
+                    if (checkIndent === currentIndent && checkLine.match(/^\s*end\s*$/)) {
                         foundEnd = true;
                         break;
                     }
-                    // Stop searching if we hit another block start at same or lower indentation
-                    const currentIndent = line.match(/^\s*/)?.[0].length || 0;
-                    const checkIndent = lines[j].match(/^\s*/)?.[0].length || 0;
-                    if (checkIndent <= currentIndent && lines[j].match(/^\s*(def|class|interface|if|elif|else|for|loop|try|catch|finally|switch|record|enum)\b/)) {
+                    
+                    // If we find 'elif' or 'else' at the same indentation (for if blocks), they count as block continuation
+                    if (checkIndent === currentIndent && checkLine.match(/^\s*(elif|else):/)) {
+                        const keyword = blockMatch[1];
+                        // elif/else can close an if block
+                        if (keyword === 'if') {
+                            foundElifOrElse = true;
+                            break;
+                        }
+                    }
+                    
+                    // Stop searching if we hit another block start at same or lower indentation (but not elif/else)
+                    if (checkIndent <= currentIndent && 
+                        checkLine.match(/^\s*(def|class|interface|if|for|loop|try|catch|finally|switch|record|enum)\b/) &&
+                        !checkLine.match(/^\s*(elif|else):/)) {
                         break;
                     }
                 }
-                if (!foundEnd && !line.match(/^\s*(else|elif|case|default):/)) {
-                    
+                
+                // For 'if' blocks, either 'end', 'elif', or 'else' are acceptable
+                const blockKeyword = blockMatch[1];
+                const isIfBlock = blockKeyword === 'if';
+                const hasProperTermination = foundEnd || (isIfBlock && foundElifOrElse);
+                
+                if (!hasProperTermination && !line.match(/^\s*(else|elif|case|default):/)) {
                     const range = new vscode.Range(i, 0, i, line.length);
                     diagnostics.push(
                         new vscode.Diagnostic(
@@ -447,8 +460,75 @@ export class PolyloftLinter {
         this.validateForWhereClause(lines, diagnostics);
         this.validateLambdaSyntax(lines, diagnostics);
         this.validateSwitchCaseSyntax(lines, diagnostics);
+        this.checkBracketBalance(lines, diagnostics);
+        this.validateImports(document, lines, diagnostics);
 
         diagnosticCollection.set(document.uri, diagnostics);
+    }
+
+    /**
+     * Check for unmatched brackets across the entire document
+     */
+    private checkBracketBalance(lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        let bracketStack: { line: number; char: string }[] = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Skip comment lines
+            if (line.trim().startsWith('//') || line.trim().startsWith('/*')) {
+                continue;
+            }
+            
+            // Track brackets, skipping strings
+            for (let j = 0; j < line.length; j++) {
+                if (this.isInsideString(line, j)) {
+                    continue;
+                }
+                
+                const char = line[j];
+                if (char === '{' || char === '[' || char === '(') {
+                    bracketStack.push({ line: i, char: char });
+                } else if (char === '}' || char === ']' || char === ')') {
+                    const expected = char === '}' ? '{' : char === ']' ? '[' : '(';
+                    if (bracketStack.length === 0) {
+                        const range = new vscode.Range(i, j, i, j + 1);
+                        diagnostics.push(
+                            new vscode.Diagnostic(
+                                range,
+                                `Unexpected closing bracket '${char}' without matching opening bracket`,
+                                vscode.DiagnosticSeverity.Error
+                            )
+                        );
+                    } else {
+                        const last = bracketStack.pop()!;
+                        if (last.char !== expected) {
+                            const range = new vscode.Range(i, j, i, j + 1);
+                            diagnostics.push(
+                                new vscode.Diagnostic(
+                                    range,
+                                    `Mismatched bracket: expected '${expected === '{' ? '}' : expected === '[' ? ']' : ')'}' but found '${char}'`,
+                                    vscode.DiagnosticSeverity.Error
+                                )
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check for unclosed brackets
+        for (const unclosed of bracketStack) {
+            const closing = unclosed.char === '{' ? '}' : unclosed.char === '[' ? ']' : ')';
+            const range = new vscode.Range(unclosed.line, 0, unclosed.line, lines[unclosed.line].length);
+            diagnostics.push(
+                new vscode.Diagnostic(
+                    range,
+                    `Unclosed bracket '${unclosed.char}' (expected '${closing}')`,
+                    vscode.DiagnosticSeverity.Warning
+                )
+            );
+        }
     }
 
     /**
@@ -579,7 +659,15 @@ export class PolyloftLinter {
             if (varAssignMatch && !variableTypes.has(varAssignMatch[1])) {
                 const varName = varAssignMatch[1];
                 const value = varAssignMatch[2].trim();
-                const inferredType = this.inferType(value);
+                
+                // Check if it's a multi-line object literal
+                let inferredType: string | undefined;
+                if (value === '{' || value.endsWith('{')) {
+                    inferredType = this.inferTypeFromLines(lines, i);
+                } else {
+                    inferredType = this.inferType(value);
+                }
+                
                 if (inferredType) {
                     variableTypes.set(varName, inferredType);
                 }
@@ -637,18 +725,20 @@ export class PolyloftLinter {
                 }
             }
             
-            // Check for division by zero
-            const divZeroMatch = line.match(/\/\s*(0)(?![\.0-9])/);
-            if (divZeroMatch) {
-                const divIndex = line.indexOf(divZeroMatch[0]);
-                const range = new vscode.Range(i, divIndex, i, divIndex + divZeroMatch[0].length);
-                diagnostics.push(
-                    new vscode.Diagnostic(
-                        range,
-                        'Division by zero will cause runtime error',
-                        vscode.DiagnosticSeverity.Error
-                    )
-                );
+            // Check for division by zero (skip comments)
+            if (!line.trim().startsWith('//') && !line.trim().startsWith('/*')) {
+                const divZeroMatch = line.match(/\/\s*(0)(?![\.0-9])/);
+                if (divZeroMatch) {
+                    const divIndex = line.indexOf(divZeroMatch[0]);
+                    const range = new vscode.Range(i, divIndex, i, divIndex + divZeroMatch[0].length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            'Division by zero will cause runtime error',
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                }
             }
         }
     }
@@ -780,6 +870,16 @@ export class PolyloftLinter {
             return 'String';
         }
         
+        // Hexadecimal literals (0xFF, 0xABCD, etc.) -> Int
+        if (value.match(/^0x[0-9a-fA-F]+$/)) {
+            return 'Int';
+        }
+        
+        // Binary literals (0b010101, etc.) -> Bytes
+        if (value.match(/^0b[01]+$/)) {
+            return 'Bytes';
+        }
+        
         // Numeric literals
         if (value.match(/^\d+$/)) {
             return 'Int';
@@ -830,9 +930,82 @@ export class PolyloftLinter {
             return 'Array';
         }
         
-        // Map literals
-        if (value.match(/^\{.*:.*\}$/)) {
+        // Map literals - handle both single-line and multi-line maps
+        if (value.match(/^\{/) && value.match(/\}$/)) {
+            // Try to infer key-value types
+            // For simple cases like { A: ["B"], C: [] }
+            const keyValuePattern = /(\w+|\["[^"]*"\])\s*:\s*(\[[^\]]*\]|"[^"]*"|'[^']*'|\d+\.?\d*|\w+)/g;
+            const matches = Array.from(value.matchAll(keyValuePattern));
+            
+            if (matches.length > 0) {
+                let keyType: string | undefined;
+                let valueType: string | undefined;
+                
+                for (const match of matches) {
+                    const key = match[1];
+                    const val = match[2];
+                    
+                    // Infer key type
+                    const currentKeyType = key.match(/^["'].*["']$/) ? 'String' : 
+                                          key.match(/^\d+$/) ? 'Int' : 'String';  // Default to String for identifiers
+                    
+                    // Infer value type
+                    const currentValueType = this.inferType(val);
+                    
+                    // Set initial types
+                    if (!keyType) keyType = currentKeyType;
+                    if (!valueType) valueType = currentValueType;
+                    
+                    // Check for type consistency
+                    if (keyType !== currentKeyType) keyType = 'Any';
+                    if (valueType !== currentValueType) valueType = 'Any';
+                }
+                
+                if (keyType && valueType) {
+                    return `Map<${keyType}, ${valueType}>`;
+                }
+            }
+            
             return 'Map';
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Infer type from a multi-line value (for handling multi-line objects/arrays)
+     */
+    private inferTypeFromLines(lines: string[], startLine: number): string | undefined {
+        // Look for multi-line object literal starting with {
+        const firstLine = lines[startLine].trim();
+        if (!firstLine.match(/=\s*\{/)) {
+            return undefined;
+        }
+        
+        // Find the closing brace
+        let bracketCount = 0;
+        let endLine = startLine;
+        let fullValue = '';
+        
+        for (let i = startLine; i < lines.length; i++) {
+            const line = lines[i];
+            fullValue += line;
+            
+            for (let j = 0; j < line.length; j++) {
+                if (line[j] === '{') bracketCount++;
+                if (line[j] === '}') bracketCount--;
+            }
+            
+            if (bracketCount === 0 && i > startLine) {
+                endLine = i;
+                break;
+            }
+        }
+        
+        // Extract the value part after =
+        const valueMatch = fullValue.match(/=\s*(\{[\s\S]*\})/);
+        if (valueMatch) {
+            return this.inferType(valueMatch[1].replace(/\s+/g, ' '));
         }
         
         return undefined;
@@ -1184,5 +1357,148 @@ export class PolyloftLinter {
                 );
             }
         }
+    }
+
+    /**
+     * Validate import statements - check if imported files and symbols exist
+     */
+    private validateImports(document: vscode.TextDocument, lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return; // Can't validate without workspace context
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Match import statements: import module.path { Symbol1, Symbol2 }
+            const importMatch = line.match(/^\s*import\s+([a-zA-Z._\/]+)\s*\{([^}]+)\}/);
+            if (importMatch) {
+                const importPath = importMatch[1];
+                const symbolsStr = importMatch[2];
+                const symbols = symbolsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                
+                // Try to resolve the import path
+                const resolvedPath = this.resolveImportPath(workspaceFolder.uri.fsPath, importPath, document.uri.fsPath);
+                
+                if (!resolvedPath) {
+                    // Import path not found
+                    const pathStart = line.indexOf(importPath);
+                    const range = new vscode.Range(i, pathStart, i, pathStart + importPath.length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            `Cannot find module '${importPath}'. Make sure the file exists in libs/, src/, or relative to current file`,
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                } else {
+                    // File exists, now validate that symbols exist in the file
+                    try {
+                        const fileContent = fs.readFileSync(resolvedPath, 'utf8');
+                        
+                        // Find the start of the braces section to improve indexOf accuracy
+                        const bracesStart = line.indexOf('{');
+                        
+                        for (const symbol of symbols) {
+                            if (!this.symbolExistsInFile(fileContent, symbol)) {
+                                // Search for symbol starting from the braces section
+                                const symbolStart = bracesStart >= 0 ? 
+                                    line.indexOf(symbol, bracesStart) : 
+                                    line.indexOf(symbol);
+                                    
+                                if (symbolStart >= 0) {
+                                    const range = new vscode.Range(i, symbolStart, i, symbolStart + symbol.length);
+                                    diagnostics.push(
+                                        new vscode.Diagnostic(
+                                            range,
+                                            `'${symbol}' is not exported from module '${importPath}'`,
+                                            vscode.DiagnosticSeverity.Error
+                                        )
+                                    );
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        // Error reading file - log but don't show to user since the file existence was already verified
+                        console.error(`Failed to read import file '${resolvedPath}':`, error);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve import path to file system path (matching Polyloft interpreter logic)
+     */
+    private resolveImportPath(workspacePath: string, importPath: string, currentFilePath?: string): string | undefined {
+        // Convert dot notation to path: math.vector -> math/vector
+        const rel = importPath.replace(/\./g, '/');
+        const possiblePaths: string[] = [];
+        
+        // If we have a current file context, try relative imports from current directory first
+        if (currentFilePath) {
+            const currentDir = path.dirname(currentFilePath);
+            possiblePaths.push(
+                path.join(currentDir, rel + '.pf'),                           // same directory: helper.pf
+                path.join(currentDir, rel, 'index.pf'),                       // subdirectory with index
+                path.join(currentDir, rel, path.basename(rel) + '.pf')        // subdirectory/subdirectory.pf
+            );
+        }
+        
+        // Standard library paths
+        possiblePaths.push(
+            // libs directory
+            path.join(workspacePath, 'libs', rel + '.pf'),                    // libs/math/vector.pf (single file)
+            path.join(workspacePath, 'libs', rel, 'index.pf'),                // libs/math/vector/index.pf (public API aggregator)
+            path.join(workspacePath, 'libs', rel, path.basename(rel) + '.pf'), // libs/math/vector/vector.pf
+            // src directory
+            path.join(workspacePath, 'src', rel + '.pf'),
+            path.join(workspacePath, 'src', rel, 'index.pf')
+        );
+        
+        // Try global library paths (~/.polyloft/)
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        if (homeDir) {
+            const globalLib = path.join(homeDir, '.polyloft', 'libs');
+            const globalSrc = path.join(homeDir, '.polyloft', 'src');
+            
+            possiblePaths.push(
+                path.join(globalLib, rel + '.pf'),
+                path.join(globalLib, rel, 'index.pf'),
+                path.join(globalLib, rel, path.basename(rel) + '.pf'),
+                path.join(globalSrc, rel + '.pf'),
+                path.join(globalSrc, rel, 'index.pf')
+            );
+        }
+
+        for (const filePath of possiblePaths) {
+            if (fs.existsSync(filePath)) {
+                return filePath;
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Check if a symbol (class, function, enum, record, interface) exists in a file
+     */
+    private symbolExistsInFile(fileContent: string, symbol: string): boolean {
+        // Escape special regex characters in symbol to prevent ReDoS attacks
+        const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Check for class, enum, record, interface, or function definitions
+        const patterns = [
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?class\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?enum\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?record\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?interface\\s+${escapedSymbol}\\b`),
+            new RegExp(`def\\s+${escapedSymbol}\\s*\\(`),
+            // Also check for const/var declarations (for exported constants)
+            new RegExp(`(?:const|var|let)\\s+${escapedSymbol}\\b`),
+        ];
+
+        return patterns.some(pattern => pattern.test(fileContent));
     }
 }

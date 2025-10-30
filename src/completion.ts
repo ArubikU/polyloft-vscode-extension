@@ -480,7 +480,7 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
     }
 
     /**
-     * Resolve an import path to a file system path
+     * Resolve an import path to a file system path (matching Polyloft interpreter logic)
      */
     private async resolveImportPath(
         document: vscode.TextDocument,
@@ -491,21 +491,44 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
             return undefined;
         }
 
-        const parts = importPath.split('.');
+        // Convert dot notation to path: math.vector -> math/vector
+        const rel = importPath.replace(/\./g, '/');
         const basePath = workspaceFolder.uri.fsPath;
+        const possiblePaths: string[] = [];
         
-        // Try multiple resolution strategies
-        const possiblePaths = [
-            // Try libs folder first
-            path.join(basePath, 'libs', ...parts, 'index.pf'),
-            path.join(basePath, 'libs', ...parts.slice(0, -1), `${parts[parts.length - 1]}.pf`),
-            // Try src folder for local imports
-            path.join(basePath, 'src', `${importPath}.pf`),
-            path.join(basePath, 'src', ...parts, 'index.pf'),
-            // Try root level
-            path.join(basePath, `${importPath}.pf`),
-            path.join(basePath, ...parts, 'index.pf'),
-        ];
+        // If we have a current file context, try relative imports from current directory first
+        const currentDir = path.dirname(document.uri.fsPath);
+        possiblePaths.push(
+            path.join(currentDir, rel + '.pf'),                           // same directory: helper.pf
+            path.join(currentDir, rel, 'index.pf'),                       // subdirectory with index
+            path.join(currentDir, rel, path.basename(rel) + '.pf')        // subdirectory/subdirectory.pf
+        );
+        
+        // Standard library paths
+        possiblePaths.push(
+            // libs directory
+            path.join(basePath, 'libs', rel + '.pf'),                     // libs/math/vector.pf (single file)
+            path.join(basePath, 'libs', rel, 'index.pf'),                 // libs/math/vector/index.pf (public API aggregator)
+            path.join(basePath, 'libs', rel, path.basename(rel) + '.pf'), // libs/math/vector/vector.pf
+            // src directory
+            path.join(basePath, 'src', rel + '.pf'),
+            path.join(basePath, 'src', rel, 'index.pf')
+        );
+        
+        // Try global library paths (~/.polyloft/)
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        if (homeDir) {
+            const globalLib = path.join(homeDir, '.polyloft', 'libs');
+            const globalSrc = path.join(homeDir, '.polyloft', 'src');
+            
+            possiblePaths.push(
+                path.join(globalLib, rel + '.pf'),
+                path.join(globalLib, rel, 'index.pf'),
+                path.join(globalLib, rel, path.basename(rel) + '.pf'),
+                path.join(globalSrc, rel + '.pf'),
+                path.join(globalSrc, rel, 'index.pf')
+            );
+        }
 
         for (const filePath of possiblePaths) {
             if (fs.existsSync(filePath)) {
