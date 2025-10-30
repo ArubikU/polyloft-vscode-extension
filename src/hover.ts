@@ -167,13 +167,18 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined functions
-        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_]*))?\\s*:`, 'g');
+        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`, 'g');
         const funcMatch = funcRegex.exec(text);
         
         if (funcMatch) {
             const params = funcMatch[1] || '';
-            const returnType = funcMatch[2] || 'Void';
+            let returnType = funcMatch[2];
             const lineNum = this.getLineNumber(text, funcMatch.index);
+            
+            // If no explicit return type, try to infer from return statements
+            if (!returnType) {
+                returnType = this.inferFunctionReturnType(lines, lineNum);
+            }
             
             const markdown = new vscode.MarkdownString();
             markdown.appendCodeblock(`def ${word}(${params}) -> ${returnType}`, 'polyloft');
@@ -287,8 +292,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             return new vscode.Hover(markdown);
         }
 
-        // Check for variables with type annotations
-        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_]*))?`, 'g');
+        // Check for variables with type annotations (including generics)
+        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
         const varMatch = varRegex.exec(text);
         
         if (varMatch) {
@@ -366,6 +371,74 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
         
         return comments.length > 0 ? comments.join('\n') : null;
+    }
+
+    /**
+     * Infer the return type of a function from its return statements
+     */
+    private inferFunctionReturnType(lines: string[], funcStartLine: number): string {
+        // Find the function body (from funcStartLine to matching 'end')
+        let blockLevel = 1;
+        let returnTypes = new Set<string>();
+        let hasReturn = false;
+        
+        for (let i = funcStartLine + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            
+            // Track block nesting
+            if (line.match(/^\s*(def|if|elif|else|for|loop|try|catch|finally|class|enum|record)\b.*:/)) {
+                blockLevel++;
+            }
+            if (line.match(/^\s*end\b/)) {
+                blockLevel--;
+                if (blockLevel === 0) {
+                    break;  // End of function
+                }
+            }
+            
+            // Look for return statements
+            const returnMatch = line.match(/^\s*return\s+(.+)/);
+            if (returnMatch) {
+                hasReturn = true;
+                const returnValue = returnMatch[1].trim();
+                
+                // Infer type from return value
+                if (returnValue.match(/^["'].*["']$/)) {
+                    returnTypes.add('String');
+                } else if (returnValue.match(/^\d+$/)) {
+                    returnTypes.add('Int');
+                } else if (returnValue.match(/^\d+\.\d+$/)) {
+                    returnTypes.add('Float');
+                } else if (returnValue === 'true' || returnValue === 'false') {
+                    returnTypes.add('Bool');
+                } else if (returnValue === 'nil' || returnValue === 'null') {
+                    returnTypes.add('Nil');
+                } else if (returnValue.match(/^\[.*\]$/)) {
+                    returnTypes.add('Array');
+                } else if (returnValue.match(/^\{.*\}$/)) {
+                    returnTypes.add('Map');
+                } else {
+                    // It's an expression or variable, mark as unknown
+                    returnTypes.add('Any');
+                }
+            }
+        }
+        
+        if (!hasReturn) {
+            return 'Void';
+        }
+        
+        // If all return types are the same, use that type
+        if (returnTypes.size === 1) {
+            return Array.from(returnTypes)[0];
+        }
+        
+        // If multiple types, show them as union or use Any
+        if (returnTypes.size > 1 && returnTypes.size <= 3) {
+            return Array.from(returnTypes).join(' | ');
+        }
+        
+        return 'Any';
     }
 
     /**

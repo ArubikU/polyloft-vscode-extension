@@ -365,6 +365,17 @@ export class PolyloftLinter {
 
             // Check for unreachable code after return
             if (line.match(/^\s*return\b/)) {
+                // Check if this is a multi-line return (e.g., return { ... })
+                const returnLine = line.trim();
+                const isMultiLineReturn = returnLine.match(/return\s*[{\[\(]\s*$/) || 
+                                          (returnLine.match(/return\s+[{\[\(]/) && !returnLine.match(/[}\]\)]\s*$/));
+                
+                if (isMultiLineReturn) {
+                    // Multi-line return statement, don't flag next lines as unreachable
+                    // Wait until we find the closing bracket/paren/brace
+                    continue;
+                }
+                
                 // Look ahead for non-empty, non-comment lines before 'end'
                 for (let j = i + 1; j < lines.length; j++) {
                     const nextLine = lines[j].trim();
@@ -441,6 +452,37 @@ export class PolyloftLinter {
     }
 
     /**
+     * Helper: Check if a position in a line is inside a string literal
+     */
+    private isInsideString(line: string, position: number): boolean {
+        let inDoubleQuote = false;
+        let inSingleQuote = false;
+        let escaped = false;
+        
+        for (let i = 0; i < position; i++) {
+            const char = line[i];
+            
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            
+            if (char === '\\') {
+                escaped = true;
+                continue;
+            }
+            
+            if (char === '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (char === "'" && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+            }
+        }
+        
+        return inDoubleQuote || inSingleQuote;
+    }
+
+    /**
      * Enhanced: Detect common casing mistakes and suggest corrections
      */
     private detectCasingIssues(lines: string[], diagnostics: vscode.Diagnostic[]): void {
@@ -462,12 +504,18 @@ export class PolyloftLinter {
             // Check for lowercase builtin classes
             for (const className of builtinClasses) {
                 const lowerCase = className.toLowerCase();
-                const pattern = new RegExp(`\\b${lowerCase}\\b(?!\\s*:)`, 'gi');
+                // Don't flag if followed by '(' (method call) or preceded by '.' (member access)
+                const pattern = new RegExp(`(?<!\\.)\\b${lowerCase}\\b(?!\\s*[:(])`, 'gi');
                 let match;
                 
                 while ((match = pattern.exec(line)) !== null) {
                     // Skip if it's the correct casing
                     if (match[0] === className) {
+                        continue;
+                    }
+                    
+                    // Skip if inside a string literal
+                    if (this.isInsideString(line, match.index)) {
                         continue;
                     }
                     
@@ -491,6 +539,11 @@ export class PolyloftLinter {
                     let match;
                     
                     while ((match = pattern.exec(line)) !== null) {
+                        // Skip if inside a string literal
+                        if (this.isInsideString(line, match.index)) {
+                            continue;
+                        }
+                        
                         const range = new vscode.Diagnostic(
                             new vscode.Range(i, match.index, i, match.index + wrongCase.length),
                             `Use '${funcName}' instead of '${wrongCase}'. Built-in functions must be lowercase`,
@@ -739,8 +792,35 @@ export class PolyloftLinter {
             return 'Any';  // nil can be any type
         }
         
-        // Array literals
+        // Array literals with type inference
         if (value.match(/^\[.*\]$/)) {
+            // Try to infer the element type
+            const content = value.slice(1, -1).trim();
+            if (content.length === 0) {
+                return 'Array';
+            }
+            
+            // Split by comma (simple approach, doesn't handle nested arrays)
+            const elements = content.split(',').map(e => e.trim());
+            if (elements.length > 0) {
+                // Check if all elements are integers
+                if (elements.every(e => e.match(/^\d+$/))) {
+                    return 'Array<Int>';
+                }
+                // Check if all elements are floats
+                if (elements.every(e => e.match(/^\d+\.\d+$/))) {
+                    return 'Array<Float>';
+                }
+                // Check if all elements are strings
+                if (elements.every(e => e.match(/^["'].*["']$/))) {
+                    return 'Array<String>';
+                }
+                // Check if all elements are booleans
+                if (elements.every(e => e === 'true' || e === 'false')) {
+                    return 'Array<Bool>';
+                }
+            }
+            
             return 'Array';
         }
         
@@ -844,12 +924,12 @@ export class PolyloftLinter {
             const line = lines[i];
             
             // Track end keywords (we're exiting a block going backwards, need to skip it)
-            if (line.match(/^\s*end\s*$/)) {
+            if (line.match(/^\s*end\b/)) {
                 blockLevel++;
             }
             
             // Check for thread spawn do blocks (these are function-like contexts where return is valid)
-            if (line.match(/thread\s+spawn\s+do\s*$/)) {
+            if (line.match(/thread\s+spawn\s+do/)) {
                 if (blockLevel > 0) {
                     blockLevel--;
                 } else {
@@ -859,7 +939,7 @@ export class PolyloftLinter {
             }
             
             // Track block starts (including private/public modifiers)
-            const blockStartMatch = line.match(/^\s*(?:(?:public|pub|private|priv|protected|prot|static)\s+)?(def|if|elif|else|for|loop|try|catch|finally)\b.*:\s*$/);
+            const blockStartMatch = line.match(/^\s*(?:(?:public|pub|private|priv|protected|prot|static)\s+)?(def|if|elif|else|for|loop|try|catch|finally)\b/);
             if (blockStartMatch) {
                 if (blockLevel > 0) {
                     // We're exiting a block we were skipping
@@ -877,7 +957,7 @@ export class PolyloftLinter {
             }
             
             // Also check for constructor pattern (ClassName(params):)
-            const constructorMatch = line.match(/^\s*([A-Z][a-zA-Z0-9_]*)\s*\([^)]*\)\s*:\s*$/);
+            const constructorMatch = line.match(/^\s*([A-Z][a-zA-Z0-9_]*)\s*\([^)]*\)/);
             if (constructorMatch) {
                 if (blockLevel > 0) {
                     blockLevel--;
@@ -896,12 +976,13 @@ export class PolyloftLinter {
             const line = lines[i];
             
             // Track end keywords (we're exiting a block going backwards, need to skip it)
-            if (line.match(/^\s*end\s*$/)) {
+            if (line.match(/^\s*end\b/)) {
                 blockLevel++;
             }
             
             // Check for loop start (for or loop)
-            if (line.match(/^\s*(for|loop)\b.*:\s*$/)) {
+            // Match both single-line and multi-line syntax
+            if (line.match(/^\s*(for|loop)\b/)) {
                 if (blockLevel > 0) {
                     // We're exiting a block we were skipping
                     blockLevel--;
@@ -912,8 +993,8 @@ export class PolyloftLinter {
             }
             
             // Track other block starts
-            if (line.match(/^\s*(if|elif|else|def|try|catch|finally|class|enum|record)\b.*:\s*$/) ||
-                line.match(/^\s*do\s*$/)) {
+            if (line.match(/^\s*(if|elif|else|def|try|catch|finally|class|enum|record)\b/) ||
+                line.match(/^\s*do\b/)) {
                 if (blockLevel > 0) {
                     blockLevel--;
                 }
