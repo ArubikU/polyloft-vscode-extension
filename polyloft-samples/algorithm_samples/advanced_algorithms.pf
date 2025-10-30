@@ -282,7 +282,7 @@ def createTrieNode():
 end
 
 // Global trie root
-let trieRoot = createTrieNode()
+let trieRoot: Map<String, Map<String, Any> | Bool> = createTrieNode()
 
 def trieInsert(word):
     let node = trieRoot
