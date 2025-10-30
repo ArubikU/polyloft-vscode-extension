@@ -353,7 +353,7 @@ export class PolyloftLinter {
                             new vscode.Diagnostic(
                                 range,
                                 'Function parameters should have type annotations',
-                                vscode.DiagnosticSeverity.Warning
+                                vscode.DiagnosticSeverity.Hint
                             )
                         );
                         break;
@@ -430,7 +430,6 @@ export class PolyloftLinter {
         // Third pass: Enhanced type checking and unreachable code detection
         this.performTypeChecking(lines, diagnostics);
         this.detectUnreachableCode(lines, diagnostics);
-        this.detectLogicalOperatorErrors(lines, diagnostics);
         this.detectRangeOperatorErrors(lines, diagnostics);
         this.detectStringInterpolationIssues(lines, diagnostics);
         this.detectCasingIssues(lines, diagnostics);
@@ -475,7 +474,7 @@ export class PolyloftLinter {
                     const range = new vscode.Diagnostic(
                         new vscode.Range(i, match.index, i, match.index + match[0].length),
                         `Use '${className}' instead of '${match[0]}'. Built-in class names must start with uppercase`,
-                        vscode.DiagnosticSeverity.Error
+                        vscode.DiagnosticSeverity.Warning
                     );
                     diagnostics.push(range);
                 }
@@ -633,60 +632,6 @@ export class PolyloftLinter {
         }
     }
 
-    /**
-     * Enhanced: Detect usage of 'and', 'or', 'not' keywords which don't exist in Polyloft
-     */
-    private detectLogicalOperatorErrors(lines: string[], diagnostics: vscode.Diagnostic[]): void {
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            
-            if (line.trim().startsWith('//')) {
-                continue;
-            }
-            
-            // Check for 'and' keyword (should be &&)
-            let andMatch;
-            const andRegex = /\band\b/g;
-            while ((andMatch = andRegex.exec(line)) !== null) {
-                const range = new vscode.Range(i, andMatch.index, i, andMatch.index + 3);
-                diagnostics.push(
-                    new vscode.Diagnostic(
-                        range,
-                        "Use '&&' instead of 'and'. Polyloft does not have an 'and' keyword",
-                        vscode.DiagnosticSeverity.Error
-                    )
-                );
-            }
-            
-            // Check for 'or' keyword (should be ||)
-            let orMatch;
-            const orRegex = /\bor\b/g;
-            while ((orMatch = orRegex.exec(line)) !== null) {
-                const range = new vscode.Range(i, orMatch.index, i, orMatch.index + 2);
-                diagnostics.push(
-                    new vscode.Diagnostic(
-                        range,
-                        "Use '||' instead of 'or'. Polyloft does not have an 'or' keyword",
-                        vscode.DiagnosticSeverity.Error
-                    )
-                );
-            }
-            
-            // Check for 'not' keyword (should be !)
-            let notMatch;
-            const notRegex = /\bnot\s+/g;
-            while ((notMatch = notRegex.exec(line)) !== null) {
-                const range = new vscode.Range(i, notMatch.index, i, notMatch.index + notMatch[0].length);
-                diagnostics.push(
-                    new vscode.Diagnostic(
-                        range,
-                        "Use '!' instead of 'not'. Polyloft does not have a 'not' keyword",
-                        vscode.DiagnosticSeverity.Error
-                    )
-                );
-            }
-        }
-    }
 
     /**
      * Enhanced: Detect incorrect range operator (.. instead of ...)
