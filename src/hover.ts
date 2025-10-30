@@ -647,12 +647,24 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         for (let i = 0; i < str.length; i++) {
             const char = str[i];
             
-            if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
-                if (!inString) {
-                    inString = true;
-                    stringChar = char;
-                } else if (char === stringChar) {
-                    inString = false;
+            // Check for quotes, but handle escaped quotes properly
+            if (char === '"' || char === "'") {
+                // Count preceding backslashes
+                let backslashCount = 0;
+                let j = i - 1;
+                while (j >= 0 && str[j] === '\\') {
+                    backslashCount++;
+                    j--;
+                }
+                
+                // If even number of backslashes (including 0), the quote is not escaped
+                if (backslashCount % 2 === 0) {
+                    if (!inString) {
+                        inString = true;
+                        stringChar = char;
+                    } else if (char === stringChar) {
+                        inString = false;
+                    }
                 }
             }
             
@@ -779,7 +791,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
         
         // If only integers, result is int
-        if (expr.match(/^\d+[\+\-\*\/\%\d\s()]*\d+$/)) {
+        if (expr.match(/^\d+[+\-*/%\d\s()]*\d+$/)) {
             return 'Int';
         }
         
