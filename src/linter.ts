@@ -1397,21 +1397,31 @@ export class PolyloftLinter {
                     try {
                         const fileContent = fs.readFileSync(resolvedPath, 'utf8');
                         
+                        // Find the start of the braces section to improve indexOf accuracy
+                        const bracesStart = line.indexOf('{');
+                        
                         for (const symbol of symbols) {
                             if (!this.symbolExistsInFile(fileContent, symbol)) {
-                                const symbolStart = line.indexOf(symbol);
-                                const range = new vscode.Range(i, symbolStart, i, symbolStart + symbol.length);
-                                diagnostics.push(
-                                    new vscode.Diagnostic(
-                                        range,
-                                        `'${symbol}' is not exported from module '${importPath}'`,
-                                        vscode.DiagnosticSeverity.Error
-                                    )
-                                );
+                                // Search for symbol starting from the braces section
+                                const symbolStart = bracesStart >= 0 ? 
+                                    line.indexOf(symbol, bracesStart) : 
+                                    line.indexOf(symbol);
+                                    
+                                if (symbolStart >= 0) {
+                                    const range = new vscode.Range(i, symbolStart, i, symbolStart + symbol.length);
+                                    diagnostics.push(
+                                        new vscode.Diagnostic(
+                                            range,
+                                            `'${symbol}' is not exported from module '${importPath}'`,
+                                            vscode.DiagnosticSeverity.Error
+                                        )
+                                    );
+                                }
                             }
                         }
                     } catch (error) {
-                        // Error reading file - already reported above
+                        // Error reading file - log but don't show to user since the file existence was already verified
+                        console.error(`Failed to read import file '${resolvedPath}':`, error);
                     }
                 }
             }
@@ -1475,15 +1485,18 @@ export class PolyloftLinter {
      * Check if a symbol (class, function, enum, record, interface) exists in a file
      */
     private symbolExistsInFile(fileContent: string, symbol: string): boolean {
+        // Escape special regex characters in symbol to prevent ReDoS attacks
+        const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
         // Check for class, enum, record, interface, or function definitions
         const patterns = [
-            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?class\\s+${symbol}\\b`),
-            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?enum\\s+${symbol}\\b`),
-            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?record\\s+${symbol}\\b`),
-            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?interface\\s+${symbol}\\b`),
-            new RegExp(`def\\s+${symbol}\\s*\\(`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?class\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?enum\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?record\\s+${escapedSymbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?interface\\s+${escapedSymbol}\\b`),
+            new RegExp(`def\\s+${escapedSymbol}\\s*\\(`),
             // Also check for const/var declarations (for exported constants)
-            new RegExp(`(?:const|var|let)\\s+${symbol}\\b`),
+            new RegExp(`(?:const|var|let)\\s+${escapedSymbol}\\b`),
         ];
 
         return patterns.some(pattern => pattern.test(fileContent));

@@ -15,7 +15,9 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         const importLineMatch = lineText.match(/^\s*import\s+([a-zA-Z._\/]+)\s*\{/);
         if (importLineMatch) {
             const importPath = importLineMatch[1];
-            const importPathStart = lineText.indexOf(importPath);
+            // Use the match index to find the exact position of the import path
+            const importKeywordMatch = lineText.match(/^\s*import\s+/);
+            const importPathStart = importKeywordMatch ? importKeywordMatch[0].length : lineText.indexOf(importPath);
             const importPathEnd = importPathStart + importPath.length;
             
             // Check if cursor is within the import path
@@ -35,9 +37,12 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
 
         const word = document.getText(wordRange);
         const text = document.getText();
+        
+        // Escape special regex characters in word to prevent ReDoS attacks
+        const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
         // Look for class definition
-        const classMatch = text.match(new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${word}\\b`, 'g'));
+        const classMatch = text.match(new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedWord}\\b`, 'g'));
         if (classMatch) {
             const index = text.indexOf(classMatch[0]);
             const pos = document.positionAt(index);
@@ -45,7 +50,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for enum definition
-        const enumMatch = text.match(new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${word}\\b`, 'g'));
+        const enumMatch = text.match(new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedWord}\\b`, 'g'));
         if (enumMatch) {
             const index = text.indexOf(enumMatch[0]);
             const pos = document.positionAt(index);
@@ -53,7 +58,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for record definition
-        const recordMatch = text.match(new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${word}\\b`, 'g'));
+        const recordMatch = text.match(new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedWord}\\b`, 'g'));
         if (recordMatch) {
             const index = text.indexOf(recordMatch[0]);
             const pos = document.positionAt(index);
@@ -61,7 +66,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for interface definition
-        const interfaceMatch = text.match(new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${word}\\b`, 'g'));
+        const interfaceMatch = text.match(new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedWord}\\b`, 'g'));
         if (interfaceMatch) {
             const index = text.indexOf(interfaceMatch[0]);
             const pos = document.positionAt(index);
@@ -69,7 +74,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for function definition
-        const funcMatch = text.match(new RegExp(`def\\s+${word}\\s*\\(`, 'g'));
+        const funcMatch = text.match(new RegExp(`def\\s+${escapedWord}\\s*\\(`, 'g'));
         if (funcMatch) {
             const index = text.indexOf(funcMatch[0]);
             const pos = document.positionAt(index);
@@ -77,7 +82,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for variable definition
-        const varMatch = text.match(new RegExp(`(?:var|let|const|final)\\s+${word}\\b`, 'g'));
+        const varMatch = text.match(new RegExp(`(?:var|let|const|final)\\s+${escapedWord}\\b`, 'g'));
         if (varMatch) {
             const index = text.indexOf(varMatch[0]);
             const pos = document.positionAt(index);
@@ -85,7 +90,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
         }
 
         // Look for import and try to resolve to file
-        const importMatch = text.match(new RegExp(`import\\s+([a-zA-Z._\/]+)\\s*\\{[^}]*${word}[^}]*\\}`, 'g'));
+        const importMatch = text.match(new RegExp(`import\\s+([a-zA-Z._\/]+)\\s*\\{[^}]*${escapedWord}[^}]*\\}`, 'g'));
         if (importMatch) {
             const fullMatch = importMatch[0];
             const pathMatch = fullMatch.match(/import\s+([a-zA-Z._\/]+)/);
@@ -164,9 +169,12 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
                 const fileDocument = await vscode.workspace.openTextDocument(fileUri);
                 const fileText = fileDocument.getText();
 
+                // Escape special regex characters in symbol to prevent ReDoS attacks
+                const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
                 // Find the symbol in the file - check all possible definition types
                 // Check for class
-                const classMatch = fileText.match(new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${symbol}\\b`));
+                const classMatch = fileText.match(new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedSymbol}\\b`));
                 if (classMatch) {
                     const index = fileText.indexOf(classMatch[0]);
                     const pos = fileDocument.positionAt(index);
@@ -174,7 +182,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
                 }
 
                 // Check for enum
-                const enumMatch = fileText.match(new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${symbol}\\b`));
+                const enumMatch = fileText.match(new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedSymbol}\\b`));
                 if (enumMatch) {
                     const index = fileText.indexOf(enumMatch[0]);
                     const pos = fileDocument.positionAt(index);
@@ -182,7 +190,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
                 }
 
                 // Check for record
-                const recordMatch = fileText.match(new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${symbol}\\b`));
+                const recordMatch = fileText.match(new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedSymbol}\\b`));
                 if (recordMatch) {
                     const index = fileText.indexOf(recordMatch[0]);
                     const pos = fileDocument.positionAt(index);
@@ -190,7 +198,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
                 }
 
                 // Check for interface
-                const interfaceMatch = fileText.match(new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${symbol}\\b`));
+                const interfaceMatch = fileText.match(new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedSymbol}\\b`));
                 if (interfaceMatch) {
                     const index = fileText.indexOf(interfaceMatch[0]);
                     const pos = fileDocument.positionAt(index);
@@ -198,7 +206,7 @@ export class PolyloftDefinitionProvider implements vscode.DefinitionProvider {
                 }
 
                 // Check for function
-                const funcMatch = fileText.match(new RegExp(`def\\s+${symbol}\\s*\\(`));
+                const funcMatch = fileText.match(new RegExp(`def\\s+${escapedSymbol}\\s*\\(`));
                 if (funcMatch) {
                     const index = fileText.indexOf(funcMatch[0]);
                     const pos = fileDocument.positionAt(index);
