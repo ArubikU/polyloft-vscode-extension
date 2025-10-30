@@ -461,6 +461,7 @@ export class PolyloftLinter {
         this.validateLambdaSyntax(lines, diagnostics);
         this.validateSwitchCaseSyntax(lines, diagnostics);
         this.checkBracketBalance(lines, diagnostics);
+        this.validateImports(document, lines, diagnostics);
 
         diagnosticCollection.set(document.uri, diagnostics);
     }
@@ -867,6 +868,16 @@ export class PolyloftLinter {
         // String literals
         if (value.match(/^["'].*["']$/)) {
             return 'String';
+        }
+        
+        // Hexadecimal literals (0xFF, 0xABCD, etc.) -> Int
+        if (value.match(/^0x[0-9a-fA-F]+$/)) {
+            return 'Int';
+        }
+        
+        // Binary literals (0b010101, etc.) -> Bytes
+        if (value.match(/^0b[01]+$/)) {
+            return 'Bytes';
         }
         
         // Numeric literals
@@ -1346,5 +1357,135 @@ export class PolyloftLinter {
                 );
             }
         }
+    }
+
+    /**
+     * Validate import statements - check if imported files and symbols exist
+     */
+    private validateImports(document: vscode.TextDocument, lines: string[], diagnostics: vscode.Diagnostic[]): void {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            return; // Can't validate without workspace context
+        }
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Match import statements: import module.path { Symbol1, Symbol2 }
+            const importMatch = line.match(/^\s*import\s+([a-zA-Z._\/]+)\s*\{([^}]+)\}/);
+            if (importMatch) {
+                const importPath = importMatch[1];
+                const symbolsStr = importMatch[2];
+                const symbols = symbolsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                
+                // Try to resolve the import path
+                const resolvedPath = this.resolveImportPath(workspaceFolder.uri.fsPath, importPath, document.uri.fsPath);
+                
+                if (!resolvedPath) {
+                    // Import path not found
+                    const pathStart = line.indexOf(importPath);
+                    const range = new vscode.Range(i, pathStart, i, pathStart + importPath.length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            `Cannot find module '${importPath}'. Make sure the file exists in libs/, src/, or relative to current file`,
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
+                } else {
+                    // File exists, now validate that symbols exist in the file
+                    try {
+                        const fileContent = fs.readFileSync(resolvedPath, 'utf8');
+                        
+                        for (const symbol of symbols) {
+                            if (!this.symbolExistsInFile(fileContent, symbol)) {
+                                const symbolStart = line.indexOf(symbol);
+                                const range = new vscode.Range(i, symbolStart, i, symbolStart + symbol.length);
+                                diagnostics.push(
+                                    new vscode.Diagnostic(
+                                        range,
+                                        `'${symbol}' is not exported from module '${importPath}'`,
+                                        vscode.DiagnosticSeverity.Error
+                                    )
+                                );
+                            }
+                        }
+                    } catch (error) {
+                        // Error reading file - already reported above
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolve import path to file system path (matching Polyloft interpreter logic)
+     */
+    private resolveImportPath(workspacePath: string, importPath: string, currentFilePath?: string): string | undefined {
+        // Convert dot notation to path: math.vector -> math/vector
+        const rel = importPath.replace(/\./g, '/');
+        const possiblePaths: string[] = [];
+        
+        // If we have a current file context, try relative imports from current directory first
+        if (currentFilePath) {
+            const currentDir = path.dirname(currentFilePath);
+            possiblePaths.push(
+                path.join(currentDir, rel + '.pf'),                           // same directory: helper.pf
+                path.join(currentDir, rel, 'index.pf'),                       // subdirectory with index
+                path.join(currentDir, rel, path.basename(rel) + '.pf')        // subdirectory/subdirectory.pf
+            );
+        }
+        
+        // Standard library paths
+        possiblePaths.push(
+            // libs directory
+            path.join(workspacePath, 'libs', rel + '.pf'),                    // libs/math/vector.pf (single file)
+            path.join(workspacePath, 'libs', rel, 'index.pf'),                // libs/math/vector/index.pf (public API aggregator)
+            path.join(workspacePath, 'libs', rel, path.basename(rel) + '.pf'), // libs/math/vector/vector.pf
+            // src directory
+            path.join(workspacePath, 'src', rel + '.pf'),
+            path.join(workspacePath, 'src', rel, 'index.pf')
+        );
+        
+        // Try global library paths (~/.polyloft/)
+        const homeDir = process.env.HOME || process.env.USERPROFILE;
+        if (homeDir) {
+            const globalLib = path.join(homeDir, '.polyloft', 'libs');
+            const globalSrc = path.join(homeDir, '.polyloft', 'src');
+            
+            possiblePaths.push(
+                path.join(globalLib, rel + '.pf'),
+                path.join(globalLib, rel, 'index.pf'),
+                path.join(globalLib, rel, path.basename(rel) + '.pf'),
+                path.join(globalSrc, rel + '.pf'),
+                path.join(globalSrc, rel, 'index.pf')
+            );
+        }
+
+        for (const filePath of possiblePaths) {
+            if (fs.existsSync(filePath)) {
+                return filePath;
+            }
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Check if a symbol (class, function, enum, record, interface) exists in a file
+     */
+    private symbolExistsInFile(fileContent: string, symbol: string): boolean {
+        // Check for class, enum, record, interface, or function definitions
+        const patterns = [
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?class\\s+${symbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?enum\\s+${symbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?record\\s+${symbol}\\b`),
+            new RegExp(`(?:public\\s+|private\\s+|protected\\s+)?interface\\s+${symbol}\\b`),
+            new RegExp(`def\\s+${symbol}\\s*\\(`),
+            // Also check for const/var declarations (for exported constants)
+            new RegExp(`(?:const|var|let)\\s+${symbol}\\b`),
+        ];
+
+        return patterns.some(pattern => pattern.test(fileContent));
     }
 }
