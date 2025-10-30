@@ -562,11 +562,12 @@ export class PolyloftLinter {
     private performTypeChecking(lines: string[], diagnostics: vscode.Diagnostic[]): void {
         const variableTypes = new Map<string, string>();
         
+        // First pass: collect all type information
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
-            // Track variable declarations with explicit types
-            const varDeclMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_<>,\s]*)/);
+            // Track variable declarations with explicit types (including generics)
+            const varDeclMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z][a-zA-Z0-9_<>,\s|]*)/);
             if (varDeclMatch) {
                 const varName = varDeclMatch[1];
                 const varType = varDeclMatch[2].trim();
@@ -583,6 +584,11 @@ export class PolyloftLinter {
                     variableTypes.set(varName, inferredType);
                 }
             }
+        }
+        
+        // Second pass: check for type errors
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
             
             // Check type mismatches in assignments
             const reassignMatch = line.match(/^\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);

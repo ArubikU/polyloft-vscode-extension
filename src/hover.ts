@@ -375,12 +375,16 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
 
     /**
      * Infer the return type of a function from its return statements
+     * Enhanced to handle classes, generics, function calls, and complex expressions
      */
     private inferFunctionReturnType(lines: string[], funcStartLine: number): string {
         // Find the function body (from funcStartLine to matching 'end')
         let blockLevel = 1;
         let returnTypes = new Set<string>();
         let hasReturn = false;
+        
+        // First, collect all variable types and class definitions in scope
+        const scopeTypes = this.collectScopeTypes(lines);
         
         for (let i = funcStartLine + 1; i < lines.length; i++) {
             const line = lines[i].trim();
@@ -402,24 +406,9 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                 hasReturn = true;
                 const returnValue = returnMatch[1].trim();
                 
-                // Infer type from return value
-                if (returnValue.match(/^["'].*["']$/)) {
-                    returnTypes.add('String');
-                } else if (returnValue.match(/^\d+$/)) {
-                    returnTypes.add('Int');
-                } else if (returnValue.match(/^\d+\.\d+$/)) {
-                    returnTypes.add('Float');
-                } else if (returnValue === 'true' || returnValue === 'false') {
-                    returnTypes.add('Bool');
-                } else if (returnValue === 'nil' || returnValue === 'null') {
-                    returnTypes.add('Nil');
-                } else if (returnValue.match(/^\[.*\]$/)) {
-                    returnTypes.add('Array');
-                } else if (returnValue.match(/^\{.*\}$/)) {
-                    returnTypes.add('Map');
-                } else {
-                    // It's an expression or variable, mark as unknown
-                    returnTypes.add('Any');
+                const inferredType = this.inferExpressionType(returnValue, scopeTypes, lines);
+                if (inferredType) {
+                    returnTypes.add(inferredType);
                 }
             }
         }
@@ -439,6 +428,376 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
         
         return 'Any';
+    }
+
+    /**
+     * Collect type information from the document (classes, variables, etc.)
+     */
+    private collectScopeTypes(lines: string[]): Map<string, string> {
+        const types = new Map<string, string>();
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            
+            // Collect class definitions
+            const classMatch = line.match(/^\s*class\s+([A-Z][a-zA-Z0-9_]*)/);
+            if (classMatch) {
+                types.set(classMatch[1], classMatch[1]);
+            }
+            
+            // Collect record definitions
+            const recordMatch = line.match(/^\s*record\s+([A-Z][a-zA-Z0-9_]*)/);
+            if (recordMatch) {
+                types.set(recordMatch[1], recordMatch[1]);
+            }
+            
+            // Collect enum definitions
+            const enumMatch = line.match(/^\s*enum\s+([A-Z][a-zA-Z0-9_]*)/);
+            if (enumMatch) {
+                types.set(enumMatch[1], enumMatch[1]);
+            }
+            
+            // Collect variable declarations with types
+            const varMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([a-zA-Z][a-zA-Z0-9_<>,\s|]*)/);
+            if (varMatch) {
+                types.set(varMatch[1], varMatch[2].trim());
+            }
+            
+            // Collect function definitions with return types
+            const funcMatch = line.match(/^\s*def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)(?:\s*->\s*([a-zA-Z][a-zA-Z0-9_<>,\s|]*))?/);
+            if (funcMatch && funcMatch[2]) {
+                types.set(funcMatch[1], funcMatch[2].trim());
+            }
+        }
+        
+        return types;
+    }
+
+    /**
+     * Enhanced type inference for complex expressions
+     */
+    private inferExpressionType(expr: string, scopeTypes: Map<string, string>, lines: string[]): string {
+        expr = expr.trim();
+        
+        // Remove trailing semicolon if present
+        if (expr.endsWith(';')) {
+            expr = expr.slice(0, -1).trim();
+        }
+        
+        // String literals
+        if (expr.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (expr.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (expr.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (expr === 'true' || expr === 'false') {
+            return 'Bool';
+        }
+        
+        // Nil/null
+        if (expr === 'nil' || expr === 'null') {
+            return 'Nil';
+        }
+        
+        // Array literals with enhanced type inference
+        if (expr.match(/^\[.*\]$/)) {
+            return this.inferArrayType(expr);
+        }
+        
+        // Object/Map literals
+        if (expr.match(/^\{.*\}$/)) {
+            return this.inferObjectType(expr);
+        }
+        
+        // Constructor calls (ClassName(...))
+        const constructorMatch = expr.match(/^([A-Z][a-zA-Z0-9_]*)\s*\(/);
+        if (constructorMatch) {
+            const className = constructorMatch[1];
+            return className;
+        }
+        
+        // Function calls - try to find return type
+        const funcCallMatch = expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+        if (funcCallMatch) {
+            const funcName = funcCallMatch[1];
+            if (scopeTypes.has(funcName)) {
+                return scopeTypes.get(funcName)!;
+            }
+            
+            // Try to find the function definition and infer its return type
+            const funcDefMatch = this.findFunctionDefinition(funcName, lines);
+            if (funcDefMatch) {
+                return funcDefMatch;
+            }
+        }
+        
+        // Method calls (object.method())
+        const methodCallMatch = expr.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/);
+        if (methodCallMatch) {
+            const objectName = methodCallMatch[1];
+            const methodName = methodCallMatch[2];
+            
+            // Check if we know the object's type
+            if (scopeTypes.has(objectName)) {
+                const objectType = scopeTypes.get(objectName)!;
+                return this.inferMethodReturnType(objectType, methodName);
+            }
+        }
+        
+        // Variable references
+        if (expr.match(/^[a-zA-Z_][a-zA-Z0-9_]*$/)) {
+            if (scopeTypes.has(expr)) {
+                return scopeTypes.get(expr)!;
+            }
+        }
+        
+        // Arithmetic operations
+        if (expr.match(/[\+\-\*\/\%]/)) {
+            return this.inferArithmeticType(expr, scopeTypes);
+        }
+        
+        // Comparison operations
+        if (expr.match(/[<>]=?|[!=]=|&&|\|\|/)) {
+            return 'Bool';
+        }
+        
+        // String concatenation
+        if (expr.includes('+') && (expr.includes('"') || expr.includes("'"))) {
+            return 'String';
+        }
+        
+        return 'Any';
+    }
+
+    /**
+     * Infer array type from array literal
+     */
+    private inferArrayType(arrayExpr: string): string {
+        const content = arrayExpr.slice(1, -1).trim();
+        if (content.length === 0) {
+            return 'Array';
+        }
+        
+        // Simple split by comma (doesn't handle nested arrays perfectly)
+        const elements = this.splitByComma(content);
+        if (elements.length === 0) {
+            return 'Array';
+        }
+        
+        // Check element types
+        const elementTypes = new Set<string>();
+        for (const elem of elements) {
+            const trimmed = elem.trim();
+            if (trimmed.match(/^\d+$/)) {
+                elementTypes.add('Int');
+            } else if (trimmed.match(/^\d+\.\d+$/)) {
+                elementTypes.add('Float');
+            } else if (trimmed.match(/^["'].*["']$/)) {
+                elementTypes.add('String');
+            } else if (trimmed === 'true' || trimmed === 'false') {
+                elementTypes.add('Bool');
+            } else if (trimmed.match(/^\{.*\}$/)) {
+                elementTypes.add('Map');
+            } else {
+                elementTypes.add('Any');
+            }
+        }
+        
+        // If all same type, return Array<Type>
+        if (elementTypes.size === 1) {
+            const elemType = Array.from(elementTypes)[0];
+            return `Array<${elemType}>`;
+        }
+        
+        return 'Array<Any>';
+    }
+
+    /**
+     * Infer object/map type from literal
+     */
+    private inferObjectType(objExpr: string): string {
+        const content = objExpr.slice(1, -1).trim();
+        
+        // Check if it has key:value pairs (Map) or just values
+        if (content.includes(':')) {
+            return 'Map';
+        }
+        
+        return 'Map';
+    }
+
+    /**
+     * Split string by comma, respecting brackets and quotes
+     */
+    private splitByComma(str: string): string[] {
+        const result: string[] = [];
+        let current = '';
+        let depth = 0;
+        let inString = false;
+        let stringChar = '';
+        
+        for (let i = 0; i < str.length; i++) {
+            const char = str[i];
+            
+            if ((char === '"' || char === "'") && (i === 0 || str[i - 1] !== '\\')) {
+                if (!inString) {
+                    inString = true;
+                    stringChar = char;
+                } else if (char === stringChar) {
+                    inString = false;
+                }
+            }
+            
+            if (!inString) {
+                if (char === '[' || char === '{' || char === '(') {
+                    depth++;
+                } else if (char === ']' || char === '}' || char === ')') {
+                    depth--;
+                } else if (char === ',' && depth === 0) {
+                    result.push(current.trim());
+                    current = '';
+                    continue;
+                }
+            }
+            
+            current += char;
+        }
+        
+        if (current.trim().length > 0) {
+            result.push(current.trim());
+        }
+        
+        return result;
+    }
+
+    /**
+     * Find function definition and return its return type
+     */
+    private findFunctionDefinition(funcName: string, lines: string[]): string | undefined {
+        const funcRegex = new RegExp(`def\\s+${funcName}\\s*\\([^)]*\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`);
+        
+        for (const line of lines) {
+            const match = line.match(funcRegex);
+            if (match) {
+                if (match[1]) {
+                    return match[1].trim();
+                }
+                // If no explicit return type, we could recursively infer it
+                // but that might be too expensive, so return Any for now
+                return 'Any';
+            }
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Infer method return type based on object type and method name
+     */
+    private inferMethodReturnType(objectType: string, methodName: string): string {
+        // Built-in types and their common methods
+        const builtinMethods: { [key: string]: { [method: string]: string } } = {
+            'String': {
+                'length': 'Int',
+                'substring': 'String',
+                'toLowerCase': 'String',
+                'toUpperCase': 'String',
+                'trim': 'String',
+                'split': 'Array<String>',
+                'replace': 'String',
+                'indexOf': 'Int',
+                'charAt': 'String',
+                'concat': 'String',
+                'toString': 'String'
+            },
+            'Array': {
+                'length': 'Int',
+                'push': 'Void',
+                'pop': 'Any',
+                'shift': 'Any',
+                'unshift': 'Void',
+                'concat': 'Array',
+                'slice': 'Array',
+                'toString': 'String',
+                'get': 'Any'
+            },
+            'Map': {
+                'get': 'Any',
+                'set': 'Void',
+                'has': 'Bool',
+                'hasKey': 'Bool',
+                'keys': 'Array<String>',
+                'values': 'Array<Any>',
+                'size': 'Int',
+                'toString': 'String'
+            },
+            'Set': {
+                'add': 'Void',
+                'has': 'Bool',
+                'delete': 'Bool',
+                'size': 'Int',
+                'toString': 'String'
+            }
+        };
+        
+        // Check if it's a generic type like Array<Int> or Map<String, Any>
+        const genericMatch = objectType.match(/^([A-Z][a-zA-Z0-9_]*)</);
+        const baseType = genericMatch ? genericMatch[1] : objectType;
+        
+        if (builtinMethods[baseType] && builtinMethods[baseType][methodName]) {
+            let returnType = builtinMethods[baseType][methodName];
+            
+            // For generic arrays, preserve element type in methods that return array elements
+            if (baseType === 'Array' && methodName === 'get') {
+                const elementTypeMatch = objectType.match(/Array<(.+)>/);
+                if (elementTypeMatch) {
+                    return elementTypeMatch[1];
+                }
+            }
+            
+            return returnType;
+        }
+        
+        return 'Any';
+    }
+
+    /**
+     * Infer type from arithmetic expressions
+     */
+    private inferArithmeticType(expr: string, scopeTypes: Map<string, string>): string {
+        // Simple heuristic: if expression contains float, result is float
+        if (expr.match(/\d+\.\d+/)) {
+            return 'Float';
+        }
+        
+        // If only integers, result is int
+        if (expr.match(/^\d+[\+\-\*\/\%\d\s()]*\d+$/)) {
+            return 'Int';
+        }
+        
+        // Check if any variables in expression are Float
+        const varMatches = expr.match(/[a-zA-Z_][a-zA-Z0-9_]*/g);
+        if (varMatches) {
+            for (const varName of varMatches) {
+                if (scopeTypes.has(varName)) {
+                    const varType = scopeTypes.get(varName)!;
+                    if (varType === 'Float' || varType === 'Double') {
+                        return 'Float';
+                    }
+                }
+            }
+        }
+        
+        // Default to Int for arithmetic
+        return 'Int';
     }
 
     /**
