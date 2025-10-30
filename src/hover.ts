@@ -790,8 +790,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             return 'Float';
         }
         
-        // If only integers, result is int
-        if (expr.match(/^\d+[+\-*/%\d\s()]*\d+$/)) {
+        // If only integers and arithmetic operators (including single numbers), result is int
+        if (expr.match(/^[\d+\-*/%\s()]+$/)) {
             return 'Int';
         }
         
