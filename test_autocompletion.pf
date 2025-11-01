@@ -1,0 +1,77 @@
+// Test file for user-defined class autocompletion and type checking
+
+// Define a simple class
+class Point:
+    let x
+    let y
+    
+    Point(x, y):
+        this.x = x
+        this.y = y
+    end
+    
+    def distance() -> Float:
+        return (this.x * this.x + this.y * this.y)
+    end
+    
+    def toString() -> String:
+        return "Point(#{this.x}, #{this.y})"
+    end
+end
+
+// Define another class hierarchy
+class Animal:
+    name: String
+    
+    Animal(name: String):
+        this.name = name
+    end
+    
+    def speak() -> String:
+        return "Some sound"
+    end
+end
+
+class Dog < Animal:
+    Dog(name: String):
+        super(name)
+    end
+    
+    def speak() -> String:
+        return "Woof!"
+    end
+end
+
+class Cat < Animal:
+    Cat(name: String):
+        super(name)
+    end
+    
+    def speak() -> String:
+        return "Meow!"
+    end
+end
+
+// Test automatic type inference
+var p = Point(5, 10)
+println(p.distance())  // Should autocomplete distance() and toString()
+println(p.toString())
+
+// Test explicit type annotation with correct type
+var dog: Dog = Dog("Buddy")
+println(dog.speak())
+
+// Test inheritance - Dog is compatible with Animal
+var animal: Animal = Dog("Max")
+println(animal.speak())
+
+// This SHOULD ERROR: Cat is not compatible with Dog
+var wrongType: Dog = Cat("Whiskers")
+
+// This SHOULD ERROR: incompatible classes
+var incompatible: Cat = Dog("Rex")
+
+// Test automatic type inference with classes
+var myAnimal = Cat("Fluffy")
+println(myAnimal.speak())  // Should autocomplete speak() method
+println(myAnimal.name)     // Should autocomplete name field

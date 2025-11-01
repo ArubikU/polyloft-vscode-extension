@@ -654,7 +654,7 @@ export class PolyloftLinter {
                 variableTypes.set(varName, varType);
             }
             
-            // Infer types from assignments
+            // Infer types from assignments (including constructor calls)
             const varAssignMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
             if (varAssignMatch && !variableTypes.has(varAssignMatch[1])) {
                 const varName = varAssignMatch[1];
@@ -670,6 +670,27 @@ export class PolyloftLinter {
                 
                 if (inferredType) {
                     variableTypes.set(varName, inferredType);
+                }
+            }
+            
+            // Check for explicit type with constructor call - validate compatibility
+            const explicitConstructorMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_]*)\s*=\s*([A-Z][a-zA-Z0-9_]*)\s*\(/);
+            if (explicitConstructorMatch) {
+                const varName = explicitConstructorMatch[1];
+                const explicitType = explicitConstructorMatch[2];
+                const constructorType = explicitConstructorMatch[3];
+                
+                // Check if types are compatible
+                if (!this.isTypeCompatible(explicitType, constructorType, lines)) {
+                    const constructorIndex = line.indexOf(constructorType);
+                    const range = new vscode.Range(i, constructorIndex, i, line.length);
+                    diagnostics.push(
+                        new vscode.Diagnostic(
+                            range,
+                            `Type mismatch: Cannot assign '${constructorType}' to variable of type '${explicitType}'. Classes are not compatible.`,
+                            vscode.DiagnosticSeverity.Error
+                        )
+                    );
                 }
             }
         }
@@ -688,14 +709,17 @@ export class PolyloftLinter {
                     const expectedType = variableTypes.get(varName)!;
                     const actualType = this.inferType(value);
                     
-                    if (actualType && !this.isTypeCompatible(expectedType, actualType)) {
+                    if (actualType && !this.isTypeCompatible(expectedType, actualType, lines)) {
                         const varIndex = line.indexOf(varName);
                         const range = new vscode.Range(i, varIndex, i, line.length);
+                        const severity = this.isUserDefinedClass(expectedType, lines) || this.isUserDefinedClass(actualType, lines)
+                            ? vscode.DiagnosticSeverity.Error
+                            : vscode.DiagnosticSeverity.Warning;
                         diagnostics.push(
                             new vscode.Diagnostic(
                                 range,
                                 `Type mismatch: Cannot assign '${actualType}' to variable of type '${expectedType}'`,
-                                vscode.DiagnosticSeverity.Warning
+                                severity
                             )
                         );
                     }
@@ -712,7 +736,7 @@ export class PolyloftLinter {
                     const leftType = variableTypes.get(left)!;
                     const rightType = this.inferType(right);
                     
-                    if (rightType && !this.isTypeCompatible(leftType, rightType) && !this.isTypeCompatible(rightType, leftType)) {
+                    if (rightType && !this.isTypeCompatible(leftType, rightType, lines) && !this.isTypeCompatible(rightType, leftType, lines)) {
                         const range = new vscode.Range(i, 0, i, line.length);
                         diagnostics.push(
                             new vscode.Diagnostic(
@@ -865,6 +889,12 @@ export class PolyloftLinter {
     private inferType(value: string): string | undefined {
         value = value.trim();
         
+        // Constructor call - infer type from class name
+        const constructorMatch = value.match(/^([A-Z][a-zA-Z0-9_]*)\s*\(/);
+        if (constructorMatch) {
+            return constructorMatch[1];
+        }
+        
         // String literals
         if (value.match(/^["'].*["']$/)) {
             return 'String';
@@ -1014,7 +1044,7 @@ export class PolyloftLinter {
     /**
      * Check if two types are compatible for assignment
      */
-    private isTypeCompatible(targetType: string, sourceType: string): boolean {
+    private isTypeCompatible(targetType: string, sourceType: string, lines?: string[]): boolean {
         // Exact match
         if (targetType === sourceType) {
             return true;
@@ -1033,6 +1063,74 @@ export class PolyloftLinter {
             return true;
         }
         
+        // Check class inheritance if lines are provided
+        if (lines) {
+            const classHierarchy = this.buildClassHierarchy(lines);
+            return this.isSubclass(sourceType, targetType, classHierarchy);
+        }
+        
+        return false;
+    }
+
+    /**
+     * Build class hierarchy map (class -> parent class)
+     */
+    private buildClassHierarchy(lines: string[]): Map<string, string> {
+        const hierarchy = new Map<string, string>();
+        
+        for (const line of lines) {
+            // Match class with inheritance: class Dog < Animal
+            const classMatch = line.match(/^\s*(?:(?:public|private|protected|sealed|abstract)\s+)*class\s+([A-Z][a-zA-Z0-9_]*)\s*<\s*([A-Z][a-zA-Z0-9_]*)/);
+            if (classMatch) {
+                const className = classMatch[1];
+                const parentClass = classMatch[2];
+                hierarchy.set(className, parentClass);
+            }
+        }
+        
+        return hierarchy;
+    }
+
+    /**
+     * Check if sourceClass is a subclass of targetClass
+     */
+    private isSubclass(sourceClass: string, targetClass: string, hierarchy: Map<string, string>): boolean {
+        let currentClass = sourceClass;
+        const visited = new Set<string>();
+        
+        while (currentClass) {
+            if (currentClass === targetClass) {
+                return true;
+            }
+            
+            // Prevent infinite loops
+            if (visited.has(currentClass)) {
+                break;
+            }
+            visited.add(currentClass);
+            
+            // Move up the hierarchy
+            const parent = hierarchy.get(currentClass);
+            if (!parent) {
+                break;
+            }
+            currentClass = parent;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Check if a type name is a user-defined class
+     */
+    private isUserDefinedClass(typeName: string, lines: string[]): boolean {
+        // Check if class is defined in the document
+        for (const line of lines) {
+            const classMatch = line.match(/^\s*(?:(?:public|private|protected|sealed|abstract)\s+)*class\s+([A-Z][a-zA-Z0-9_]*)/);
+            if (classMatch && classMatch[1] === typeName) {
+                return true;
+            }
+        }
         return false;
     }
 

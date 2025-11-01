@@ -37,6 +37,23 @@ interface BuiltinPackages {
     };
 }
 
+interface ClassMember {
+    name: string;
+    type: 'field' | 'method';
+    visibility: 'public' | 'private' | 'protected';
+    isStatic: boolean;
+    isFinal: boolean;
+    returnType?: string;
+    fieldType?: string;
+}
+
+interface ClassDefinition {
+    name: string;
+    members: ClassMember[];
+    extends?: string;
+    visibility: 'public' | 'private' | 'protected';
+}
+
 export class PolyloftCompletionProvider implements vscode.CompletionItemProvider {
     private keywords = [
         'var', 'let', 'const', 'final', 'def', 'class', 'interface', 'import',
@@ -69,6 +86,210 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         } catch (error) {
             console.error('Failed to load builtin-packages.json:', error);
         }
+    }
+
+    /**
+     * Parse class definitions from text
+     */
+    private parseClassDefinitions(text: string): Map<string, ClassDefinition> {
+        const classes = new Map<string, ClassDefinition>();
+        
+        // Match class declarations with optional modifiers and inheritance
+        const classRegex = /^\s*((?:public|private|protected|sealed|abstract)\s+)*class\s+([A-Z][a-zA-Z0-9_]*)(?:\s+<\s+([A-Z][a-zA-Z0-9_]*))?\s*:/gm;
+        let classMatch;
+        
+        while ((classMatch = classRegex.exec(text)) !== null) {
+            const modifiers = classMatch[1] || '';
+            const className = classMatch[2];
+            const extendsClass = classMatch[3];
+            
+            const visibility = modifiers.includes('private') ? 'private' : 
+                             modifiers.includes('protected') ? 'protected' : 'public';
+            
+            // Find the class body (from class declaration to matching 'end')
+            const classStart = classMatch.index;
+            const classBody = this.extractClassBody(text, classStart);
+            
+            if (classBody) {
+                const members = this.parseClassMembers(classBody);
+                classes.set(className, {
+                    name: className,
+                    members,
+                    extends: extendsClass,
+                    visibility
+                });
+            }
+        }
+        
+        return classes;
+    }
+
+    /**
+     * Extract class body from start position to matching 'end'
+     */
+    private extractClassBody(text: string, startPos: number): string | null {
+        const lines = text.substring(startPos).split('\n');
+        let depth = 0;
+        let bodyLines: string[] = [];
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            bodyLines.push(line);
+            
+            // Track nested blocks
+            if (line.match(/:\s*$/)) {
+                depth++;
+            }
+            if (line.match(/^\s*end\s*$/)) {
+                depth--;
+                if (depth === 0) {
+                    return bodyLines.join('\n');
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Parse members from class body
+     */
+    private parseClassMembers(classBody: string): ClassMember[] {
+        const members: ClassMember[] = [];
+        const lines = classBody.split('\n');
+        
+        for (const line of lines) {
+            // Parse field declarations
+            const fieldMatch = line.match(/^\s*((?:public|private|protected|static|final)\s+)*(var|let|const|final)?\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_<>,\s]*)/);
+            if (fieldMatch) {
+                const modifiers = fieldMatch[1] || '';
+                const fieldName = fieldMatch[3];
+                const fieldType = fieldMatch[4].trim();
+                
+                members.push({
+                    name: fieldName,
+                    type: 'field',
+                    visibility: modifiers.includes('private') ? 'private' : 
+                              modifiers.includes('protected') ? 'protected' : 'public',
+                    isStatic: modifiers.includes('static'),
+                    isFinal: modifiers.includes('final') || modifiers.includes('const'),
+                    fieldType
+                });
+                continue;
+            }
+            
+            // Parse simple field declarations (let x, var y)
+            const simpleFieldMatch = line.match(/^\s*((?:public|private|protected|static|final)\s+)*(var|let)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/);
+            if (simpleFieldMatch) {
+                const modifiers = simpleFieldMatch[1] || '';
+                const fieldName = simpleFieldMatch[3];
+                
+                members.push({
+                    name: fieldName,
+                    type: 'field',
+                    visibility: modifiers.includes('private') ? 'private' : 
+                              modifiers.includes('protected') ? 'protected' : 'public',
+                    isStatic: modifiers.includes('static'),
+                    isFinal: false,
+                    fieldType: 'Any'
+                });
+                continue;
+            }
+            
+            // Parse method declarations
+            const methodMatch = line.match(/^\s*((?:public|private|protected|static)\s+)*def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)(?:\s*->\s*([A-Z][a-zA-Z0-9_<>,\s]*))?/);
+            if (methodMatch) {
+                const modifiers = methodMatch[1] || '';
+                const methodName = methodMatch[2];
+                const returnType = methodMatch[3] || 'Void';
+                
+                members.push({
+                    name: methodName,
+                    type: 'method',
+                    visibility: modifiers.includes('private') ? 'private' : 
+                              modifiers.includes('protected') ? 'protected' : 'public',
+                    isStatic: modifiers.includes('static'),
+                    isFinal: false,
+                    returnType
+                });
+            }
+        }
+        
+        return members;
+    }
+
+    /**
+     * Infer variable types from the document
+     */
+    private inferVariableTypes(text: string): Map<string, string> {
+        const types = new Map<string, string>();
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+            // Explicit type annotation
+            const explicitTypeMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*([A-Z][a-zA-Z0-9_<>,\s|]*)/);
+            if (explicitTypeMatch) {
+                types.set(explicitTypeMatch[1], explicitTypeMatch[2].trim());
+                continue;
+            }
+            
+            // Constructor call - infer type from class instantiation
+            const constructorMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([A-Z][a-zA-Z0-9_]*)\s*\(/);
+            if (constructorMatch) {
+                const varName = constructorMatch[1];
+                const className = constructorMatch[2];
+                types.set(varName, className);
+                continue;
+            }
+            
+            // Simple assignment without explicit type
+            const simpleAssignMatch = line.match(/^\s*(?:var|let|const|final)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(.+)/);
+            if (simpleAssignMatch) {
+                const varName = simpleAssignMatch[1];
+                const value = simpleAssignMatch[2].trim();
+                const inferredType = this.inferTypeFromValue(value);
+                if (inferredType) {
+                    types.set(varName, inferredType);
+                }
+            }
+        }
+        
+        return types;
+    }
+
+    /**
+     * Infer type from a value expression
+     */
+    private inferTypeFromValue(value: string): string | undefined {
+        // String literals
+        if (value.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (value.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (value.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (value === 'true' || value === 'false') {
+            return 'Bool';
+        }
+        
+        // Array literals
+        if (value.match(/^\[.*\]$/)) {
+            return 'Array';
+        }
+        
+        // Map literals
+        if (value.match(/^\{.*\}$/)) {
+            return 'Map';
+        }
+        
+        return undefined;
     }
 
     public async provideCompletionItems(
@@ -290,6 +511,76 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         }
 
         const text = document.getText();
+
+        // **NEW**: Check if objectName is a variable and get its type
+        const variableTypes = this.inferVariableTypes(text);
+        let objectType = variableTypes.get(objectName);
+        
+        // If we found a type for this variable, use it
+        if (objectType) {
+            // Parse all class definitions in current document
+            const classDefinitions = this.parseClassDefinitions(text);
+            
+            // Check if the type is a user-defined class
+            if (classDefinitions.has(objectType)) {
+                const classDef = classDefinitions.get(objectType)!;
+                
+                // Add class members as completions
+                for (const member of classDef.members) {
+                    // Skip private members (for now, we'd need to check if we're inside the class)
+                    if (member.visibility === 'private') {
+                        continue;
+                    }
+                    
+                    if (member.type === 'field') {
+                        const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Field);
+                        item.detail = `${member.fieldType || 'Any'}`;
+                        if (member.isFinal) {
+                            item.detail += ' (final)';
+                        }
+                        completionItems.push(item);
+                    } else if (member.type === 'method') {
+                        const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Method);
+                        item.detail = `${member.name}() -> ${member.returnType || 'Void'}`;
+                        item.insertText = new vscode.SnippetString(`${member.name}($0)`);
+                        completionItems.push(item);
+                    }
+                }
+                
+                // If class has inheritance, add parent members
+                if (classDef.extends && classDefinitions.has(classDef.extends)) {
+                    const parentClass = classDefinitions.get(classDef.extends)!;
+                    for (const member of parentClass.members) {
+                        // Skip private members from parent
+                        if (member.visibility === 'private') {
+                            continue;
+                        }
+                        
+                        if (member.type === 'field') {
+                            const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Field);
+                            item.detail = `${member.fieldType || 'Any'} (inherited)`;
+                            completionItems.push(item);
+                        } else if (member.type === 'method') {
+                            const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Method);
+                            item.detail = `${member.name}() -> ${member.returnType || 'Void'} (inherited)`;
+                            item.insertText = new vscode.SnippetString(`${member.name}($0)`);
+                            completionItems.push(item);
+                        }
+                    }
+                }
+                
+                // Return early if we found user-defined class completions
+                if (completionItems.length > 0) {
+                    return completionItems;
+                }
+            }
+            
+            // Check imported classes
+            const importedCompletions = await this.getImportedClassCompletions(document, text, objectType);
+            if (importedCompletions.length > 0) {
+                return importedCompletions;
+            }
+        }
 
         // Check if it's an enum (including imported enums)
         const enumCompletions = await this.getEnumCompletions(document, text, objectName);
@@ -615,6 +906,73 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
     /**
      * Get completions for record instance members
      */
+    /**
+     * Get completions for imported class members
+     */
+    private async getImportedClassCompletions(
+        document: vscode.TextDocument,
+        text: string,
+        className: string
+    ): Promise<vscode.CompletionItem[]> {
+        const completionItems: vscode.CompletionItem[] = [];
+        
+        // Check if this class is imported
+        const importRegex = /import\s+([a-zA-Z._\/]+)\s*\{([^}]+)\}/g;
+        let importMatch;
+        
+        while ((importMatch = importRegex.exec(text)) !== null) {
+            const importPath = importMatch[1];
+            const symbols = importMatch[2].split(',').map(s => s.trim());
+            
+            if (symbols.includes(className)) {
+                // Found the import, now resolve the file
+                const resolvedFile = await this.resolveImportPath(document, importPath);
+                if (resolvedFile) {
+                    try {
+                        const fileDocument = await vscode.workspace.openTextDocument(resolvedFile);
+                        const fileText = fileDocument.getText();
+                        
+                        // Parse class definitions from imported file
+                        const classDefinitions = this.parseClassDefinitions(fileText);
+                        
+                        if (classDefinitions.has(className)) {
+                            const classDef = classDefinitions.get(className)!;
+                            
+                            // Add class members
+                            for (const member of classDef.members) {
+                                // Skip private members from imported classes
+                                if (member.visibility === 'private') {
+                                    continue;
+                                }
+                                
+                                if (member.type === 'field') {
+                                    const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Field);
+                                    item.detail = `${member.fieldType || 'Any'}`;
+                                    if (member.isFinal) {
+                                        item.detail += ' (final)';
+                                    }
+                                    completionItems.push(item);
+                                } else if (member.type === 'method') {
+                                    const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Method);
+                                    item.detail = `${member.name}() -> ${member.returnType || 'Void'}`;
+                                    item.insertText = new vscode.SnippetString(`${member.name}($0)`);
+                                    completionItems.push(item);
+                                }
+                            }
+                            
+                            return completionItems;
+                        }
+                    } catch (error) {
+                        console.error('Error reading imported file:', error);
+                    }
+                }
+                break;
+            }
+        }
+        
+        return completionItems;
+    }
+
     private getRecordInstanceCompletions(text: string, recordName: string): vscode.CompletionItem[] {
         const completionItems: vscode.CompletionItem[] = [];
 
