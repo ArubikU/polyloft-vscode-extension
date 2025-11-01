@@ -95,10 +95,10 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         const classes = new Map<string, ClassDefinition>();
         
         // Match class declarations with optional modifiers and inheritance
-        const classRegex = /^\s*((?:public|private|protected|sealed|abstract)\s+)*class\s+([A-Z][a-zA-Z0-9_]*)(?:\s+<\s+([A-Z][a-zA-Z0-9_]*))?\s*:/gm;
-        let classMatch;
+        // Create a new regex for each call to avoid state issues
+        const classMatches = text.matchAll(/^\s*((?:public|private|protected|sealed|abstract)\s+)*class\s+([A-Z][a-zA-Z0-9_]*)(?:\s+<\s+([A-Z][a-zA-Z0-9_]*))?\s*:/gm);
         
-        while ((classMatch = classRegex.exec(text)) !== null) {
+        for (const classMatch of classMatches) {
             const modifiers = classMatch[1] || '';
             const className = classMatch[2];
             const extendsClass = classMatch[3];
@@ -107,7 +107,7 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
                              modifiers.includes('protected') ? 'protected' : 'public';
             
             // Find the class body (from class declaration to matching 'end')
-            const classStart = classMatch.index;
+            const classStart = classMatch.index || 0;
             const classBody = this.extractClassBody(text, classStart);
             
             if (classBody) {
@@ -290,6 +290,40 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
         }
         
         return undefined;
+    }
+
+    /**
+     * Get all inherited members from parent classes (recursive)
+     */
+    private getInheritedMembers(
+        classDef: ClassDefinition, 
+        classDefinitions: Map<string, ClassDefinition>
+    ): ClassMember[] {
+        const inheritedMembers: ClassMember[] = [];
+        const visited = new Set<string>();
+        
+        let currentParent = classDef.extends;
+        while (currentParent && classDefinitions.has(currentParent)) {
+            // Prevent infinite loops
+            if (visited.has(currentParent)) {
+                break;
+            }
+            visited.add(currentParent);
+            
+            const parentClass = classDefinitions.get(currentParent)!;
+            
+            // Add all non-private members from parent
+            for (const member of parentClass.members) {
+                if (member.visibility !== 'private') {
+                    inheritedMembers.push(member);
+                }
+            }
+            
+            // Move to grandparent
+            currentParent = parentClass.extends;
+        }
+        
+        return inheritedMembers;
     }
 
     public async provideCompletionItems(
@@ -547,25 +581,18 @@ export class PolyloftCompletionProvider implements vscode.CompletionItemProvider
                     }
                 }
                 
-                // If class has inheritance, add parent members
-                if (classDef.extends && classDefinitions.has(classDef.extends)) {
-                    const parentClass = classDefinitions.get(classDef.extends)!;
-                    for (const member of parentClass.members) {
-                        // Skip private members from parent
-                        if (member.visibility === 'private') {
-                            continue;
-                        }
-                        
-                        if (member.type === 'field') {
-                            const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Field);
-                            item.detail = `${member.fieldType || 'Any'} (inherited)`;
-                            completionItems.push(item);
-                        } else if (member.type === 'method') {
-                            const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Method);
-                            item.detail = `${member.name}() -> ${member.returnType || 'Void'} (inherited)`;
-                            item.insertText = new vscode.SnippetString(`${member.name}($0)`);
-                            completionItems.push(item);
-                        }
+                // If class has inheritance, add parent members (traverse entire hierarchy)
+                const inheritedMembers = this.getInheritedMembers(classDef, classDefinitions);
+                for (const member of inheritedMembers) {
+                    if (member.type === 'field') {
+                        const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Field);
+                        item.detail = `${member.fieldType || 'Any'} (inherited)`;
+                        completionItems.push(item);
+                    } else if (member.type === 'method') {
+                        const item = new vscode.CompletionItem(member.name, vscode.CompletionItemKind.Method);
+                        item.detail = `${member.name}() -> ${member.returnType || 'Void'} (inherited)`;
+                        item.insertText = new vscode.SnippetString(`${member.name}($0)`);
+                        completionItems.push(item);
                     }
                 }
                 

@@ -1099,15 +1099,15 @@ export class PolyloftLinter {
         const visited = new Set<string>();
         
         while (currentClass) {
-            if (currentClass === targetClass) {
-                return true;
-            }
-            
-            // Prevent infinite loops
+            // Prevent infinite loops - check before processing
             if (visited.has(currentClass)) {
                 break;
             }
             visited.add(currentClass);
+            
+            if (currentClass === targetClass) {
+                return true;
+            }
             
             // Move up the hierarchy
             const parent = hierarchy.get(currentClass);
