@@ -160,6 +160,50 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         const text = document.getText();
         const lines = text.split('\n');
 
+        // Check for user-defined class methods accessed via dot notation
+        const memberMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/);
+        if (memberMatch && memberMatch[2] === word) {
+            const objectName = memberMatch[1];
+            
+            // Infer the type of the object
+            const objectType = this.inferVariableType(text, objectName);
+            
+            if (objectType && objectType !== 'Any') {
+                // Find the class definition
+                const classRegex = new RegExp(`class\\s+${objectType}\\s+[^]*?end`, 'g');
+                const classMatch = classRegex.exec(text);
+                
+                if (classMatch) {
+                    const classBody = classMatch[0];
+                    
+                    // Look for the method in the class
+                    const methodRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
+                    const methodMatch = methodRegex.exec(classBody);
+                    
+                    if (methodMatch) {
+                        const params = methodMatch[1] || '';
+                        const returnType = methodMatch[2] || 'Void';
+                        
+                        const markdown = new vscode.MarkdownString();
+                        markdown.appendCodeblock(`${objectType}.${word}(${params}) -> ${returnType}`, 'polyloft');
+                        
+                        // Try to find comments before the method
+                        const methodIndex = classBody.indexOf(methodMatch[0]);
+                        const methodLineNum = classBody.substring(0, methodIndex).split('\n').length - 1;
+                        const classLines = classBody.split('\n');
+                        const methodComments = this.getPrecedingComments(classLines, methodLineNum);
+                        if (methodComments) {
+                            markdown.appendMarkdown('\n\n' + methodComments);
+                        }
+                        
+                        markdown.appendMarkdown('\n\n*Method of class ' + objectType + '*');
+                        
+                        return new vscode.Hover(markdown);
+                    }
+                }
+            }
+        }
+
         // Check if this word is an imported symbol
         const importedSymbolInfo = await this.checkImportedSymbol(document, word);
         if (importedSymbolInfo) {
@@ -210,6 +254,13 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             const comments = this.getPrecedingComments(lines, lineNum);
             if (comments) {
                 markdown.appendMarkdown('\n\n' + comments);
+            }
+            
+            // Try to find constructor (init method) and show its signature
+            const constructorInfo = this.getClassConstructorInfo(text, word, lineNum);
+            if (constructorInfo) {
+                markdown.appendMarkdown('\n\n**Constructor:**\n');
+                markdown.appendCodeblock(constructorInfo, 'polyloft');
             }
             
             markdown.appendMarkdown(`\n\n*Defined at line ${lineNum + 1}*`);
@@ -293,12 +344,17 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for variables with type annotations (including generics)
-        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
+        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?(?:\\s*=\\s*(.+))?`, 'g');
         const varMatch = varRegex.exec(text);
         
         if (varMatch) {
-            const varType = varMatch[1] || 'Any';
+            let varType = varMatch[1]; // Explicit type annotation
             const lineNum = this.getLineNumber(text, varMatch.index);
+            
+            // If no explicit type, infer from value
+            if (!varType) {
+                varType = this.inferVariableType(text, word);
+            }
             
             const markdown = new vscode.MarkdownString();
             markdown.appendCodeblock(`${word}: ${varType}`, 'polyloft');
@@ -315,6 +371,126 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         return undefined;
+    }
+
+    /**
+     * Infer the type of a variable from its declaration in the text
+     */
+    private inferVariableType(text: string, varName: string): string {
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+            // Explicit type annotation
+            const explicitTypeMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*)`));
+            if (explicitTypeMatch) {
+                return explicitTypeMatch[1].trim();
+            }
+            
+            // Constructor call - infer type from class instantiation
+            const constructorMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*=\\s*([A-Z][a-zA-Z0-9_]*)\\s*\\(`));
+            if (constructorMatch) {
+                return constructorMatch[1];
+            }
+            
+            // Simple assignment without explicit type
+            const simpleAssignMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*=\\s*(.+)`));
+            if (simpleAssignMatch) {
+                const value = simpleAssignMatch[1].trim();
+                const inferredType = this.inferTypeFromValue(value);
+                if (inferredType) {
+                    return inferredType;
+                }
+            }
+        }
+        
+        return 'Any';
+    }
+
+    /**
+     * Infer type from a value expression
+     */
+    private inferTypeFromValue(value: string): string | undefined {
+        // Remove trailing semicolon
+        value = value.replace(/;$/, '').trim();
+        
+        // String literals
+        if (value.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (value.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (value.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (value === 'true' || value === 'false') {
+            return 'Bool';
+        }
+        
+        // Nil/null
+        if (value === 'nil' || value === 'null') {
+            return 'Nil';
+        }
+        
+        // Array literals
+        if (value.match(/^\[.*\]$/)) {
+            return 'Array';
+        }
+        
+        // Map literals
+        if (value.match(/^\{.*\}$/)) {
+            return 'Map';
+        }
+        
+        // Constructor calls
+        const constructorMatch = value.match(/^([A-Z][a-zA-Z0-9_]*)\s*\(/);
+        if (constructorMatch) {
+            return constructorMatch[1];
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Get constructor (init method) information for a class
+     */
+    private getClassConstructorInfo(text: string, className: string, classStartLine: number): string | null {
+        const lines = text.split('\n');
+        
+        // Find the class body
+        let depth = 0;
+        let inClass = false;
+        
+        for (let i = classStartLine; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.match(/:\s*$/)) {
+                depth++;
+                inClass = true;
+            }
+            
+            if (inClass) {
+                // Look for init method
+                const initMatch = line.match(/^\s*(?:(?:public|private|protected)\s+)?def\s+init\s*\(([^)]*)\)/);
+                if (initMatch) {
+                    const params = initMatch[1] || '';
+                    return `${className}(${params})`;
+                }
+            }
+            
+            if (line.match(/^\s*end\s*$/)) {
+                depth--;
+                if (depth === 0) {
+                    break;
+                }
+            }
+        }
+        
+        return null;
     }
 
     private getLineNumber(text: string, index: number): number {
