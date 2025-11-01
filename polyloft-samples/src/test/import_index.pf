@@ -1,11 +1,14 @@
-import test.math { Point, PI, abs }
+import math { Point, PI, abs }
 
-p1 = Point(1, 1)
-p2 = Point(4, 5)
-distance = p1.distance(p2)
+var p1 = Point(1, 1)
+var p2 = Point(4, 5)
+
+var s: String = "strings"
+s.length()
+var distance = p1.distance(p2)
 print("Distance:", distance)
 
 print("PI value:", PI)
 
-absValue = abs(-15)
+var absValue = abs(-15)
 print("Abs(-15):", absValue)

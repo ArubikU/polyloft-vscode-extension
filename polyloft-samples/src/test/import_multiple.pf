@@ -1,5 +1,5 @@
-import test.utils.helper { greet }
-import test.utils.helper { CONSTANT, doubleValue }
+import utils.helper { greet }
+import utils.helper { CONSTANT, doubleValue }
 
 greeting = greet("Alice")
 print(greeting)

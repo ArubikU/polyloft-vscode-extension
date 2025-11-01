@@ -1,4 +1,4 @@
-import test.animal { Dog, Cat, Animal }
+import animal { Dog, Cat, Animal }
 
 dog = Dog("Buddy")
 println("Dog name: " + dog.name)

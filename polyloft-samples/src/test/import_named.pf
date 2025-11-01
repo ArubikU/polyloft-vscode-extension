@@ -1,4 +1,4 @@
-import test.utils.helper { greet, CONSTANT }
+import utils.helper { greet, CONSTANT }
 
 result = greet("World")
 print(result)

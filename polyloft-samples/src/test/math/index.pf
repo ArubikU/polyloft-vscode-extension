@@ -5,8 +5,9 @@ def abs(n):
     return n
 end
 
-PI = 3.14159
+let PI = 3.14159
 
+//Hola
 class Point:
     x: Int
     y: Int
