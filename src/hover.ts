@@ -169,7 +169,30 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             const objectType = this.inferVariableType(text, objectName);
             
             if (objectType && objectType !== 'Any') {
-                // Find the class definition
+                // Check if it's a builtin type first (String, Array, Map, Set, etc.)
+                if (this.builtinPackages && this.builtinPackages.packages[objectType]) {
+                    const pkg = this.builtinPackages.packages[objectType];
+                    
+                    if (pkg.methods) {
+                        for (const method of pkg.methods) {
+                            if (method.name === word) {
+                                const params = method.parameters.map(p => {
+                                    const optional = p.optional ? '?' : '';
+                                    return `${p.name}${optional}: ${p.type}`;
+                                }).join(', ');
+                                
+                                const markdown = new vscode.MarkdownString();
+                                markdown.appendCodeblock(`${objectType}.${word}(${params}) -> ${method.returnType}`, 'polyloft');
+                                markdown.appendMarkdown('\n\n' + method.description);
+                                markdown.appendMarkdown('\n\n*Built-in method*');
+                                
+                                return new vscode.Hover(markdown);
+                            }
+                        }
+                    }
+                }
+                
+                // Find the class definition for user-defined types
                 const classRegex = new RegExp(`class\\s+${objectType}\\s+[^]*?end`, 'g');
                 const classMatch = classRegex.exec(text);
                 
