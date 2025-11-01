@@ -1642,11 +1642,17 @@ export class PolyloftLinter {
             { regex: new RegExp(`(public|private|protected)\\s+enum\\s+${escapedSymbol}\\b`), type: 'enum' },
             { regex: new RegExp(`(public|private|protected)\\s+record\\s+${escapedSymbol}\\b`), type: 'record' },
             { regex: new RegExp(`(public|private|protected)\\s+interface\\s+${escapedSymbol}\\b`), type: 'interface' },
+            // Functions with visibility modifiers
+            { regex: new RegExp(`(public|private|protected)\\s+def\\s+${escapedSymbol}\\s*\\(`), type: 'function' },
+            // Variables with visibility modifiers
+            { regex: new RegExp(`(public|private|protected)\\s+(?:const|var|let)\\s+${escapedSymbol}\\b`), type: 'variable' },
             // Without explicit modifier - check for implicit public
             { regex: new RegExp(`^\\s*class\\s+${escapedSymbol}\\b`, 'm'), type: 'class', implicit: true },
             { regex: new RegExp(`^\\s*enum\\s+${escapedSymbol}\\b`, 'm'), type: 'enum', implicit: true },
             { regex: new RegExp(`^\\s*record\\s+${escapedSymbol}\\b`, 'm'), type: 'record', implicit: true },
             { regex: new RegExp(`^\\s*interface\\s+${escapedSymbol}\\b`, 'm'), type: 'interface', implicit: true },
+            { regex: new RegExp(`^\\s*def\\s+${escapedSymbol}\\s*\\(`, 'm'), type: 'function', implicit: true },
+            { regex: new RegExp(`^\\s*(?:const|var|let)\\s+${escapedSymbol}\\b`, 'm'), type: 'variable', implicit: true },
         ];
 
         for (const pattern of patterns) {
@@ -1658,13 +1664,6 @@ export class PolyloftLinter {
                 }
                 return match[1] as 'public' | 'private' | 'protected';
             }
-        }
-
-        // If it's a function or variable, it's implicitly public
-        const funcPattern = new RegExp(`def\\s+${escapedSymbol}\\s*\\(`);
-        const varPattern = new RegExp(`(?:const|var|let)\\s+${escapedSymbol}\\b`);
-        if (funcPattern.test(fileContent) || varPattern.test(fileContent)) {
-            return 'public';
         }
 
         return undefined;
