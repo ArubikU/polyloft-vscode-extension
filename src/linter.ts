@@ -1515,6 +1515,34 @@ export class PolyloftLinter {
                                         )
                                     );
                                 }
+                            } else {
+                                // Symbol exists, now check if import is allowed based on visibility
+                                const symbolVisibility = this.getSymbolVisibility(fileContent, symbol);
+                                
+                                if (symbolVisibility) {
+                                    const importCheck = this.canImportSymbol(
+                                        document.uri.fsPath,
+                                        resolvedPath,
+                                        symbolVisibility
+                                    );
+                                    
+                                    if (!importCheck.allowed) {
+                                        const symbolStart = bracesStart >= 0 ? 
+                                            line.indexOf(symbol, bracesStart) : 
+                                            line.indexOf(symbol);
+                                            
+                                        if (symbolStart >= 0) {
+                                            const range = new vscode.Range(i, symbolStart, i, symbolStart + symbol.length);
+                                            diagnostics.push(
+                                                new vscode.Diagnostic(
+                                                    range,
+                                                    `Cannot import '${symbol}': ${importCheck.reason}`,
+                                                    vscode.DiagnosticSeverity.Error
+                                                )
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     } catch (error) {
@@ -1598,5 +1626,87 @@ export class PolyloftLinter {
         ];
 
         return patterns.some(pattern => pattern.test(fileContent));
+    }
+
+    /**
+     * Get the visibility modifier of a symbol in a file
+     * Returns 'public', 'private', 'protected', or undefined if not found
+     */
+    private getSymbolVisibility(fileContent: string, symbol: string): 'public' | 'private' | 'protected' | undefined {
+        // Escape special regex characters in symbol to prevent ReDoS attacks
+        const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Check for class, enum, record, interface with visibility modifiers
+        const patterns = [
+            { regex: new RegExp(`(public|private|protected)\\s+class\\s+${escapedSymbol}\\b`), type: 'class' },
+            { regex: new RegExp(`(public|private|protected)\\s+enum\\s+${escapedSymbol}\\b`), type: 'enum' },
+            { regex: new RegExp(`(public|private|protected)\\s+record\\s+${escapedSymbol}\\b`), type: 'record' },
+            { regex: new RegExp(`(public|private|protected)\\s+interface\\s+${escapedSymbol}\\b`), type: 'interface' },
+            // Without explicit modifier - check for implicit public
+            { regex: new RegExp(`^\\s*class\\s+${escapedSymbol}\\b`, 'm'), type: 'class', implicit: true },
+            { regex: new RegExp(`^\\s*enum\\s+${escapedSymbol}\\b`, 'm'), type: 'enum', implicit: true },
+            { regex: new RegExp(`^\\s*record\\s+${escapedSymbol}\\b`, 'm'), type: 'record', implicit: true },
+            { regex: new RegExp(`^\\s*interface\\s+${escapedSymbol}\\b`, 'm'), type: 'interface', implicit: true },
+        ];
+
+        for (const pattern of patterns) {
+            const match = fileContent.match(pattern.regex);
+            if (match) {
+                if (pattern.implicit) {
+                    // No explicit modifier means public by default
+                    return 'public';
+                }
+                return match[1] as 'public' | 'private' | 'protected';
+            }
+        }
+
+        // If it's a function or variable, it's implicitly public
+        const funcPattern = new RegExp(`def\\s+${escapedSymbol}\\s*\\(`);
+        const varPattern = new RegExp(`(?:const|var|let)\\s+${escapedSymbol}\\b`);
+        if (funcPattern.test(fileContent) || varPattern.test(fileContent)) {
+            return 'public';
+        }
+
+        return undefined;
+    }
+
+    /**
+     * Check if an import is allowed based on visibility and folder structure
+     * - public: can be imported from anywhere
+     * - protected: can only be imported from the same folder
+     * - private: cannot be imported
+     */
+    private canImportSymbol(
+        importingFilePath: string,
+        importedFilePath: string,
+        symbolVisibility: 'public' | 'private' | 'protected'
+    ): { allowed: boolean; reason?: string } {
+        if (symbolVisibility === 'public') {
+            return { allowed: true };
+        }
+
+        if (symbolVisibility === 'private') {
+            return { 
+                allowed: false, 
+                reason: 'Private symbols cannot be imported' 
+            };
+        }
+
+        if (symbolVisibility === 'protected') {
+            // Protected: can only be imported from the same folder
+            const importingDir = path.dirname(importingFilePath);
+            const importedDir = path.dirname(importedFilePath);
+            
+            if (importingDir === importedDir) {
+                return { allowed: true };
+            }
+            
+            return { 
+                allowed: false, 
+                reason: 'Protected symbols can only be imported from the same folder' 
+            };
+        }
+
+        return { allowed: true };
     }
 }
