@@ -52,26 +52,51 @@ class Cat < Animal:
     end
 end
 
-// Test automatic type inference
+// ========================================
+// FEATURE 1: Automatic type inference
+// ========================================
+// When you type "var p = Point(5, 10)", the extension automatically infers
+// that p is of type Point, without needing explicit ": Point" annotation
+
 var p = Point(5, 10)
-println(p.distance())  // Should autocomplete distance() and toString()
+// Now when you type "p." you should see autocompletion for:
+// - distance()
+// - toString()
+// - x (field)
+// - y (field)
+println(p.distance())
 println(p.toString())
 
-// Test explicit type annotation with correct type
+// ========================================
+// FEATURE 2: Explicit type with correct assignment
+// ========================================
 var dog: Dog = Dog("Buddy")
-println(dog.speak())
+println(dog.speak())  // Autocomplete shows: speak(), name
 
-// Test inheritance - Dog is compatible with Animal
+// ========================================
+// FEATURE 3: Inheritance compatibility checking
+// ========================================
+// Dog extends Animal, so this assignment is VALID
 var animal: Animal = Dog("Max")
-println(animal.speak())
+println(animal.speak())  // Autocomplete shows: speak(), name
 
-// This SHOULD ERROR: Cat is not compatible with Dog
+// ========================================
+// FEATURE 4: Type mismatch detection (ERRORS)
+// ========================================
+// EXPECTED ERROR: Cat is not compatible with Dog
+// This should show an error because Cat and Dog are sibling classes
 var wrongType: Dog = Cat("Whiskers")
 
-// This SHOULD ERROR: incompatible classes
+// EXPECTED ERROR: Dog is not compatible with Cat
+// This should also show an error
 var incompatible: Cat = Dog("Rex")
 
-// Test automatic type inference with classes
+// ========================================
+// FEATURE 5: Automatic inference with inherited methods
+// ========================================
 var myAnimal = Cat("Fluffy")
-println(myAnimal.speak())  // Should autocomplete speak() method
-println(myAnimal.name)     // Should autocomplete name field
+// When you type "myAnimal." you should see autocompletion for:
+// - speak() (overridden method)
+// - name (inherited field from Animal)
+println(myAnimal.speak())
+println(myAnimal.name)

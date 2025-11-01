@@ -1,0 +1,62 @@
+// Test file for access modifiers (public, private, protected, static, final)
+
+class BankAccount:
+    private balance: Float
+    public accountNumber: String
+    
+    BankAccount(accountNumber: String, initialBalance: Float):
+        this.accountNumber = accountNumber
+        this.balance = initialBalance
+    end
+    
+    // Public method
+    public def deposit(amount: Float):
+        this.balance = this.balance + amount
+    end
+    
+    // Public method
+    public def getBalance() -> Float:
+        return this.balance
+    end
+    
+    // Private method - should NOT appear in autocompletion outside the class
+    private def validateTransaction(amount: Float) -> Bool:
+        return amount > 0
+    end
+end
+
+class Counter:
+    static count: Int = 0
+    
+    def increment():
+        Counter.count = Counter.count + 1
+    end
+    
+    static def getCount() -> Int:
+        return Counter.count
+    end
+end
+
+// ========================================
+// FEATURE: Private member filtering
+// ========================================
+var account = BankAccount("12345", 1000.0)
+// When you type "account." you should see:
+// - deposit(amount: Float)
+// - getBalance() -> Float
+// - accountNumber (public field)
+// You should NOT see:
+// - balance (private field)
+// - validateTransaction (private method)
+
+account.deposit(500.0)
+println(account.getBalance())
+println(account.accountNumber)
+
+// ========================================
+// FEATURE: Static members
+// ========================================
+var counter = Counter()
+counter.increment()
+// Static methods should be accessed on the class, not instance
+println(Counter.getCount())

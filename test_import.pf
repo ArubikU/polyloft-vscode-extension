@@ -1,0 +1,33 @@
+// Test file for imported class autocompletion
+// This demonstrates that autocompletion works for classes imported from other files
+
+import test_lib { Vector, Matrix }
+
+// ========================================
+// FEATURE: Imported class autocompletion
+// ========================================
+// When you type "var v = Vector(...)", the extension should:
+// 1. Infer that v is of type Vector
+// 2. Load the class definition from test_lib.pf
+// 3. Provide autocompletion for Vector's methods
+
+var v = Vector(1.0, 2.0, 3.0)
+// When you type "v." you should see autocompletion for:
+// - magnitude() -> Float
+// - normalize() -> Vector
+// - toString() -> String
+// Note: private fields (x, y, z) should NOT appear in autocompletion
+
+println(v.magnitude())
+println(v.toString())
+
+// Explicit type with imported class
+var m: Matrix = Matrix(3, 3)
+// When you type "m." you should see:
+// - transpose() -> Matrix
+// - size() -> Int
+// - rows (field)
+// - cols (field)
+
+println(m.size())
+println(m.rows)

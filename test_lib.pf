@@ -1,0 +1,45 @@
+// Library file with user-defined classes
+// This file can be imported by other files
+
+class Vector:
+    private x: Float
+    private y: Float
+    private z: Float
+    
+    Vector(x: Float, y: Float, z: Float):
+        this.x = x
+        this.y = y
+        this.z = z
+    end
+    
+    def magnitude() -> Float:
+        return (this.x * this.x + this.y * this.y + this.z * this.z)
+    end
+    
+    def normalize() -> Vector:
+        let mag = this.magnitude()
+        return Vector(this.x / mag, this.y / mag, this.z / mag)
+    end
+    
+    def toString() -> String:
+        return "Vector(#{this.x}, #{this.y}, #{this.z})"
+    end
+end
+
+class Matrix:
+    let rows: Int
+    let cols: Int
+    
+    Matrix(rows: Int, cols: Int):
+        this.rows = rows
+        this.cols = cols
+    end
+    
+    def transpose() -> Matrix:
+        return Matrix(this.cols, this.rows)
+    end
+    
+    def size() -> Int:
+        return this.rows * this.cols
+    end
+end
