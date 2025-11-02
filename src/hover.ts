@@ -65,6 +65,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         const word = document.getText(wordRange);
+        const escapedWord = this.escapeRegex(word);
         const line = document.lineAt(position.line).text;
 
         // Check if hovering over an import statement
@@ -97,45 +98,78 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                     return new vscode.Hover(markdown);
                 }
             }
+        }
 
-            // Check if it's a builtin package method
-            const memberMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/);
-            if (memberMatch && memberMatch[2] === word) {
-                const packageName = memberMatch[1];
-                const pkg = this.builtinPackages.packages[packageName];
+        const text = document.getText();
+        const lines = text.split('\n');
+
+        // Check for methods accessed via dot notation (both builtin and user-defined)
+        const memberMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/);
+        if (memberMatch && memberMatch[2] === word) {
+            const objectName = memberMatch[1];
+            
+            // First check if it's a direct builtin package reference (like Sys.println)
+            if (this.builtinPackages && this.builtinPackages.packages[objectName]) {
+                const pkg = this.builtinPackages.packages[objectName];
                 
-                if (pkg) {
-                    // Check functions
-                    if (pkg.functions) {
-                        for (const func of pkg.functions) {
-                            if (func.name === word) {
-                                const params = func.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-                                
-                                const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${func.name}(${params}) -> ${func.returnType}`, 'polyloft');
-                                markdown.appendMarkdown('\n\n' + func.description);
-                                markdown.appendMarkdown('\n\n*Built-in function*');
-                                
-                                return new vscode.Hover(markdown);
-                            }
+                // Check functions
+                if (pkg.functions) {
+                    for (const func of pkg.functions) {
+                        if (func.name === word) {
+                            const params = func.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
+                            
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${func.name}(${params}) -> ${func.returnType}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + func.description);
+                            markdown.appendMarkdown('\n\n*Built-in function*');
+                            
+                            return new vscode.Hover(markdown);
                         }
                     }
+                }
 
-                    // Check constants
-                    if (pkg.constants) {
-                        for (const constant of pkg.constants) {
-                            if (constant.name === word) {
-                                const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${constant.name}: ${constant.type} = ${constant.value}`, 'polyloft');
-                                markdown.appendMarkdown('\n\n' + constant.description);
-                                markdown.appendMarkdown('\n\n*Built-in constant*');
-                                
-                                return new vscode.Hover(markdown);
-                            }
+                // Check constants
+                if (pkg.constants) {
+                    for (const constant of pkg.constants) {
+                        if (constant.name === word) {
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${constant.name}: ${constant.type} = ${constant.value}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + constant.description);
+                            markdown.appendMarkdown('\n\n*Built-in constant*');
+                            
+                            return new vscode.Hover(markdown);
                         }
                     }
+                }
 
-                    // Check methods (for builtin classes like String, Array, Map, Set)
+                // Check methods (for builtin classes like String, Array, Map, Set)
+                if (pkg.methods) {
+                    for (const method of pkg.methods) {
+                        if (method.name === word) {
+                            const params = method.parameters.map(p => {
+                                const optional = p.optional ? '?' : '';
+                                return `${p.name}${optional}: ${p.type}`;
+                            }).join(', ');
+                            
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${method.name}(${params}) -> ${method.returnType}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + method.description);
+                            markdown.appendMarkdown('\n\n*Built-in method*');
+                            
+                            return new vscode.Hover(markdown);
+                        }
+                    }
+                }
+            }
+            
+            // Infer the type of the object for variable instances
+            const objectType = this.inferVariableType(text, objectName);
+            
+            if (objectType && objectType !== 'Any') {
+                // Check if it's a builtin type (String, Array, Map, Set, etc.)
+                if (this.builtinPackages && this.builtinPackages.packages[objectType]) {
+                    const pkg = this.builtinPackages.packages[objectType];
+                    
                     if (pkg.methods) {
                         for (const method of pkg.methods) {
                             if (method.name === word) {
@@ -145,7 +179,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                                 }).join(', ');
                                 
                                 const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${method.name}(${params}) -> ${method.returnType}`, 'polyloft');
+                                markdown.appendCodeblock(`${objectType}.${word}(${params}) -> ${method.returnType}`, 'polyloft');
                                 markdown.appendMarkdown('\n\n' + method.description);
                                 markdown.appendMarkdown('\n\n*Built-in method*');
                                 
@@ -154,11 +188,43 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                     }
                 }
+                
+                // Find the class definition for user-defined types
+                const escapedObjectType = this.escapeRegex(objectType);
+                const classRegex = new RegExp(`class\\s+${escapedObjectType}\\s+[^]*?end`, 'g');
+                const classMatch = classRegex.exec(text);
+                
+                if (classMatch) {
+                    const classBody = classMatch[0];
+                    
+                    // Look for the method in the class
+                    const escapedWord = this.escapeRegex(word);
+                    const methodRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
+                    const methodMatch = methodRegex.exec(classBody);
+                    
+                    if (methodMatch) {
+                        const params = methodMatch[1] || '';
+                        const returnType = methodMatch[2] || 'Void';
+                        
+                        const markdown = new vscode.MarkdownString();
+                        markdown.appendCodeblock(`${objectType}.${word}(${params}) -> ${returnType}`, 'polyloft');
+                        
+                        // Try to find comments before the method
+                        const methodIndex = classBody.indexOf(methodMatch[0]);
+                        const methodLineNum = classBody.substring(0, methodIndex).split('\n').length - 1;
+                        const classLines = classBody.split('\n');
+                        const methodComments = this.getPrecedingComments(classLines, methodLineNum);
+                        if (methodComments) {
+                            markdown.appendMarkdown('\n\n' + methodComments);
+                        }
+                        
+                        markdown.appendMarkdown('\n\n*Method of class ' + objectType + '*');
+                        
+                        return new vscode.Hover(markdown);
+                    }
+                }
             }
         }
-
-        const text = document.getText();
-        const lines = text.split('\n');
 
         // Check if this word is an imported symbol
         const importedSymbolInfo = await this.checkImportedSymbol(document, word);
@@ -167,7 +233,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined functions
-        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`, 'g');
+        const funcRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`, 'g');
         const funcMatch = funcRegex.exec(text);
         
         if (funcMatch) {
@@ -195,7 +261,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined classes
-        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${word}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
+        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedWord}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
         const classMatch = classRegex.exec(text);
         
         if (classMatch) {
@@ -212,13 +278,20 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                 markdown.appendMarkdown('\n\n' + comments);
             }
             
+            // Try to find constructor (init method) and show its signature
+            const constructorInfo = this.getClassConstructorInfo(text, word, lineNum);
+            if (constructorInfo) {
+                markdown.appendMarkdown('\n\n**Constructor:**\n');
+                markdown.appendCodeblock(constructorInfo, 'polyloft');
+            }
+            
             markdown.appendMarkdown(`\n\n*Defined at line ${lineNum + 1}*`);
             
             return new vscode.Hover(markdown);
         }
 
         // Check for user-defined interfaces
-        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${word}`, 'g');
+        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedWord}`, 'g');
         const interfaceMatch = interfaceRegex.exec(text);
         
         if (interfaceMatch) {
@@ -239,7 +312,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined enums
-        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${word}`, 'g');
+        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedWord}`, 'g');
         const enumMatch = enumRegex.exec(text);
         
         if (enumMatch) {
@@ -255,7 +328,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             }
             
             // Extract enum values
-            const enumBodyMatch = text.match(new RegExp(`enum\\s+${word}\\s+[^]*?end`, 'g'));
+            const enumBodyMatch = text.match(new RegExp(`enum\\s+${escapedWord}\\s+[^]*?end`, 'g'));
             if (enumBodyMatch) {
                 const enumBody = enumBodyMatch[0];
                 const valueMatches = enumBody.matchAll(/^\s+([A-Z_][A-Z0-9_]*)\s*(?:\(|$)/gm);
@@ -271,7 +344,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined records
-        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${word}(?:\\s*\\(([^)]*)\\))?`, 'g');
+        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedWord}(?:\\s*\\(([^)]*)\\))?`, 'g');
         const recordMatch = recordRegex.exec(text);
         
         if (recordMatch) {
@@ -293,12 +366,17 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for variables with type annotations (including generics)
-        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
+        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedWord}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?(?:\\s*=\\s*(.+))?`, 'g');
         const varMatch = varRegex.exec(text);
         
         if (varMatch) {
-            const varType = varMatch[1] || 'Any';
+            let varType = varMatch[1]; // Explicit type annotation
             const lineNum = this.getLineNumber(text, varMatch.index);
+            
+            // If no explicit type, infer from value
+            if (!varType) {
+                varType = this.inferVariableType(text, word);
+            }
             
             const markdown = new vscode.MarkdownString();
             markdown.appendCodeblock(`${word}: ${varType}`, 'polyloft');
@@ -315,6 +393,141 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         return undefined;
+    }
+
+    /**
+     * Escape special regex characters in a string
+     */
+    private escapeRegex(str: string): string {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
+     * Infer the type of a variable from its declaration in the text
+     */
+    private inferVariableType(text: string, varName: string): string {
+        // Escape special regex characters in variable name
+        const escapedVarName = this.escapeRegex(varName);
+        
+        // Build regex patterns once
+        const explicitTypeRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*)`);
+        const constructorRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*=\\s*([A-Z][a-zA-Z0-9_]*)\\s*\\(`);
+        const simpleAssignRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*=\\s*(.+)`);
+        
+        const lines = text.split('\n');
+        
+        for (const line of lines) {
+            // Explicit type annotation
+            const explicitTypeMatch = line.match(explicitTypeRegex);
+            if (explicitTypeMatch) {
+                return explicitTypeMatch[1].trim();
+            }
+            
+            // Constructor call - infer type from class instantiation
+            const constructorMatch = line.match(constructorRegex);
+            if (constructorMatch) {
+                return constructorMatch[1];
+            }
+            
+            // Simple assignment without explicit type
+            const simpleAssignMatch = line.match(simpleAssignRegex);
+            if (simpleAssignMatch) {
+                const value = simpleAssignMatch[1].trim();
+                const inferredType = this.inferTypeFromValue(value);
+                if (inferredType) {
+                    return inferredType;
+                }
+            }
+        }
+        
+        return 'Any';
+    }
+
+    /**
+     * Infer type from a value expression
+     */
+    private inferTypeFromValue(value: string): string | undefined {
+        // Remove trailing semicolon
+        value = value.replace(/;$/, '').trim();
+        
+        // String literals
+        if (value.match(/^["'].*["']$/)) {
+            return 'String';
+        }
+        
+        // Numeric literals
+        if (value.match(/^\d+$/)) {
+            return 'Int';
+        }
+        if (value.match(/^\d+\.\d+$/)) {
+            return 'Float';
+        }
+        
+        // Boolean literals
+        if (value === 'true' || value === 'false') {
+            return 'Bool';
+        }
+        
+        // Nil/null
+        if (value === 'nil' || value === 'null') {
+            return 'Nil';
+        }
+        
+        // Array literals
+        if (value.match(/^\[.*\]$/)) {
+            return 'Array';
+        }
+        
+        // Map literals
+        if (value.match(/^\{.*\}$/)) {
+            return 'Map';
+        }
+        
+        // Constructor calls
+        const constructorMatch = value.match(/^([A-Z][a-zA-Z0-9_]*)\s*\(/);
+        if (constructorMatch) {
+            return constructorMatch[1];
+        }
+        
+        return undefined;
+    }
+
+    /**
+     * Get constructor (init method) information for a class
+     */
+    private getClassConstructorInfo(text: string, className: string, classStartLine: number): string | null {
+        const lines = text.split('\n');
+        
+        // Find the class body
+        let depth = 0;
+        let inClass = false;
+        
+        for (let i = classStartLine; i < lines.length; i++) {
+            const line = lines[i];
+            
+            if (line.match(/:\s*$/)) {
+                depth++;
+                inClass = true;
+            }
+            
+            if (inClass) {
+                // Look for init method
+                const initMatch = line.match(/^\s*(?:(?:public|private|protected)\s+)?def\s+init\s*\(([^)]*)\)/);
+                if (initMatch) {
+                    const params = initMatch[1] || '';
+                    return `${className}(${params})`;
+                }
+            }
+            
+            if (line.match(/^\s*end\s*$/)) {
+                depth--;
+                if (depth === 0) {
+                    break;
+                }
+            }
+        }
+        
+        return null;
     }
 
     private getLineNumber(text: string, index: number): number {
@@ -694,7 +907,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
      * Find function definition and return its return type
      */
     private findFunctionDefinition(funcName: string, lines: string[]): string | undefined {
-        const funcRegex = new RegExp(`def\\s+${funcName}\\s*\\([^)]*\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`);
+        const escapedFuncName = this.escapeRegex(funcName);
+        const funcRegex = new RegExp(`def\\s+${escapedFuncName}\\s*\\([^)]*\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`);
         
         for (const line of lines) {
             const match = line.match(funcRegex);
@@ -820,6 +1034,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         word: string
     ): Promise<vscode.Hover | undefined> {
         const text = document.getText();
+        const escapedWord = this.escapeRegex(word);
         
         // Find import statements that include this symbol
         const importRegex = /import\s+([a-zA-Z._\/]+)\s*\{\s*([^}]+)\s*\}/g;
@@ -839,7 +1054,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         const fileLines = fileText.split('\n');
                         
                         // Check for enum definition
-                        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${word}\\b`, 'g');
+                        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedWord}\\b`, 'g');
                         const enumMatch = enumRegex.exec(fileText);
                         if (enumMatch) {
                             const lineNum = this.getLineNumber(fileText, enumMatch.index);
@@ -852,7 +1067,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                             }
                             
                             // Extract enum values
-                            const enumBodyMatch = fileText.match(new RegExp(`enum\\s+${word}\\s+[^]*?end`, 'g'));
+                            const enumBodyMatch = fileText.match(new RegExp(`enum\\s+${escapedWord}\\s+[^]*?end`, 'g'));
                             if (enumBodyMatch) {
                                 const enumBody = enumBodyMatch[0];
                                 const valueMatches = enumBody.matchAll(/^\s+([A-Z_][A-Z0-9_]*)\s*(?:\(|$)/gm);
@@ -867,7 +1082,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for class definition
-                        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${word}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
+                        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedWord}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
                         const classMatch = classRegex.exec(fileText);
                         if (classMatch) {
                             const parent = classMatch[1] ? ` < ${classMatch[1]}` : '';
@@ -887,7 +1102,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for record definition
-                        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${word}(?:\\s*\\(([^)]*)\\))?`, 'g');
+                        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedWord}(?:\\s*\\(([^)]*)\\))?`, 'g');
                         const recordMatch = recordRegex.exec(fileText);
                         if (recordMatch) {
                             const params = recordMatch[1] || '';
@@ -906,7 +1121,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for interface definition
-                        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${word}`, 'g');
+                        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedWord}`, 'g');
                         const interfaceMatch = interfaceRegex.exec(fileText);
                         if (interfaceMatch) {
                             const lineNum = this.getLineNumber(fileText, interfaceMatch.index);
@@ -924,7 +1139,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for function definition
-                        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_]*))?\\s*:`, 'g');
+                        const funcRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_]*))?\\s*:`, 'g');
                         const funcMatch = funcRegex.exec(fileText);
                         if (funcMatch) {
                             const params = funcMatch[1] || '';
