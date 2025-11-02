@@ -97,79 +97,75 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                     return new vscode.Hover(markdown);
                 }
             }
-
-            // Check if it's a builtin package method
-            const memberMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/);
-            if (memberMatch && memberMatch[2] === word) {
-                const packageName = memberMatch[1];
-                const pkg = this.builtinPackages.packages[packageName];
-                
-                if (pkg) {
-                    // Check functions
-                    if (pkg.functions) {
-                        for (const func of pkg.functions) {
-                            if (func.name === word) {
-                                const params = func.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
-                                
-                                const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${func.name}(${params}) -> ${func.returnType}`, 'polyloft');
-                                markdown.appendMarkdown('\n\n' + func.description);
-                                markdown.appendMarkdown('\n\n*Built-in function*');
-                                
-                                return new vscode.Hover(markdown);
-                            }
-                        }
-                    }
-
-                    // Check constants
-                    if (pkg.constants) {
-                        for (const constant of pkg.constants) {
-                            if (constant.name === word) {
-                                const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${constant.name}: ${constant.type} = ${constant.value}`, 'polyloft');
-                                markdown.appendMarkdown('\n\n' + constant.description);
-                                markdown.appendMarkdown('\n\n*Built-in constant*');
-                                
-                                return new vscode.Hover(markdown);
-                            }
-                        }
-                    }
-
-                    // Check methods (for builtin classes like String, Array, Map, Set)
-                    if (pkg.methods) {
-                        for (const method of pkg.methods) {
-                            if (method.name === word) {
-                                const params = method.parameters.map(p => {
-                                    const optional = p.optional ? '?' : '';
-                                    return `${p.name}${optional}: ${p.type}`;
-                                }).join(', ');
-                                
-                                const markdown = new vscode.MarkdownString();
-                                markdown.appendCodeblock(`${packageName}.${method.name}(${params}) -> ${method.returnType}`, 'polyloft');
-                                markdown.appendMarkdown('\n\n' + method.description);
-                                markdown.appendMarkdown('\n\n*Built-in method*');
-                                
-                                return new vscode.Hover(markdown);
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         const text = document.getText();
         const lines = text.split('\n');
 
-        // Check for user-defined class methods accessed via dot notation
+        // Check for methods accessed via dot notation (both builtin and user-defined)
         const memberMatch = line.match(/([a-zA-Z_][a-zA-Z0-9_]*)\s*\.\s*([a-zA-Z_][a-zA-Z0-9_]*)/);
         if (memberMatch && memberMatch[2] === word) {
             const objectName = memberMatch[1];
             
-            // Infer the type of the object
+            // First check if it's a direct builtin package reference (like Sys.println)
+            if (this.builtinPackages && this.builtinPackages.packages[objectName]) {
+                const pkg = this.builtinPackages.packages[objectName];
+                
+                // Check functions
+                if (pkg.functions) {
+                    for (const func of pkg.functions) {
+                        if (func.name === word) {
+                            const params = func.parameters.map(p => `${p.name}: ${p.type}`).join(', ');
+                            
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${func.name}(${params}) -> ${func.returnType}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + func.description);
+                            markdown.appendMarkdown('\n\n*Built-in function*');
+                            
+                            return new vscode.Hover(markdown);
+                        }
+                    }
+                }
+
+                // Check constants
+                if (pkg.constants) {
+                    for (const constant of pkg.constants) {
+                        if (constant.name === word) {
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${constant.name}: ${constant.type} = ${constant.value}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + constant.description);
+                            markdown.appendMarkdown('\n\n*Built-in constant*');
+                            
+                            return new vscode.Hover(markdown);
+                        }
+                    }
+                }
+
+                // Check methods (for builtin classes like String, Array, Map, Set)
+                if (pkg.methods) {
+                    for (const method of pkg.methods) {
+                        if (method.name === word) {
+                            const params = method.parameters.map(p => {
+                                const optional = p.optional ? '?' : '';
+                                return `${p.name}${optional}: ${p.type}`;
+                            }).join(', ');
+                            
+                            const markdown = new vscode.MarkdownString();
+                            markdown.appendCodeblock(`${objectName}.${method.name}(${params}) -> ${method.returnType}`, 'polyloft');
+                            markdown.appendMarkdown('\n\n' + method.description);
+                            markdown.appendMarkdown('\n\n*Built-in method*');
+                            
+                            return new vscode.Hover(markdown);
+                        }
+                    }
+                }
+            }
+            
+            // Infer the type of the object for variable instances
             const objectType = this.inferVariableType(text, objectName);
             
             if (objectType && objectType !== 'Any') {
-                // Check if it's a builtin type first (String, Array, Map, Set, etc.)
+                // Check if it's a builtin type (String, Array, Map, Set, etc.)
                 if (this.builtinPackages && this.builtinPackages.packages[objectType]) {
                     const pkg = this.builtinPackages.packages[objectType];
                     
@@ -400,23 +396,31 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
      * Infer the type of a variable from its declaration in the text
      */
     private inferVariableType(text: string, varName: string): string {
+        // Escape special regex characters in variable name
+        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Build regex patterns once
+        const explicitTypeRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*)`);
+        const constructorRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*=\\s*([A-Z][a-zA-Z0-9_]*)\\s*\\(`);
+        const simpleAssignRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*=\\s*(.+)`);
+        
         const lines = text.split('\n');
         
         for (const line of lines) {
             // Explicit type annotation
-            const explicitTypeMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*)`));
+            const explicitTypeMatch = line.match(explicitTypeRegex);
             if (explicitTypeMatch) {
                 return explicitTypeMatch[1].trim();
             }
             
             // Constructor call - infer type from class instantiation
-            const constructorMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*=\\s*([A-Z][a-zA-Z0-9_]*)\\s*\\(`));
+            const constructorMatch = line.match(constructorRegex);
             if (constructorMatch) {
                 return constructorMatch[1];
             }
             
             // Simple assignment without explicit type
-            const simpleAssignMatch = line.match(new RegExp(`(?:var|let|const|final)\\s+${varName}\\s*=\\s*(.+)`));
+            const simpleAssignMatch = line.match(simpleAssignRegex);
             if (simpleAssignMatch) {
                 const value = simpleAssignMatch[1].trim();
                 const inferredType = this.inferTypeFromValue(value);
