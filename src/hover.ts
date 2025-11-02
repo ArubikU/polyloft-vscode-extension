@@ -189,14 +189,16 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                 }
                 
                 // Find the class definition for user-defined types
-                const classRegex = new RegExp(`class\\s+${objectType}\\s+[^]*?end`, 'g');
+                const escapedObjectType = this.escapeRegex(objectType);
+                const classRegex = new RegExp(`class\\s+${escapedObjectType}\\s+[^]*?end`, 'g');
                 const classMatch = classRegex.exec(text);
                 
                 if (classMatch) {
                     const classBody = classMatch[0];
                     
                     // Look for the method in the class
-                    const methodRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
+                    const escapedWord = this.escapeRegex(word);
+                    const methodRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?`, 'g');
                     const methodMatch = methodRegex.exec(classBody);
                     
                     if (methodMatch) {
@@ -363,7 +365,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for variables with type annotations (including generics)
-        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${word}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?(?:\\s*=\\s*(.+))?`, 'g');
+        const escapedWord = this.escapeRegex(word);
+        const varRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedWord}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?(?:\\s*=\\s*(.+))?`, 'g');
         const varMatch = varRegex.exec(text);
         
         if (varMatch) {
@@ -393,11 +396,18 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
     }
 
     /**
+     * Escape special regex characters in a string
+     */
+    private escapeRegex(str: string): string {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /**
      * Infer the type of a variable from its declaration in the text
      */
     private inferVariableType(text: string, varName: string): string {
         // Escape special regex characters in variable name
-        const escapedVarName = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedVarName = this.escapeRegex(varName);
         
         // Build regex patterns once
         const explicitTypeRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedVarName}\\s*:\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*)`);
