@@ -65,6 +65,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         const word = document.getText(wordRange);
+        const escapedWord = this.escapeRegex(word);
         const line = document.lineAt(position.line).text;
 
         // Check if hovering over an import statement
@@ -232,7 +233,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined functions
-        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`, 'g');
+        const funcRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`, 'g');
         const funcMatch = funcRegex.exec(text);
         
         if (funcMatch) {
@@ -260,7 +261,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined classes
-        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${word}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
+        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedWord}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
         const classMatch = classRegex.exec(text);
         
         if (classMatch) {
@@ -290,7 +291,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined interfaces
-        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${word}`, 'g');
+        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedWord}`, 'g');
         const interfaceMatch = interfaceRegex.exec(text);
         
         if (interfaceMatch) {
@@ -311,7 +312,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined enums
-        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${word}`, 'g');
+        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedWord}`, 'g');
         const enumMatch = enumRegex.exec(text);
         
         if (enumMatch) {
@@ -327,7 +328,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
             }
             
             // Extract enum values
-            const enumBodyMatch = text.match(new RegExp(`enum\\s+${word}\\s+[^]*?end`, 'g'));
+            const enumBodyMatch = text.match(new RegExp(`enum\\s+${escapedWord}\\s+[^]*?end`, 'g'));
             if (enumBodyMatch) {
                 const enumBody = enumBodyMatch[0];
                 const valueMatches = enumBody.matchAll(/^\s+([A-Z_][A-Z0-9_]*)\s*(?:\(|$)/gm);
@@ -343,7 +344,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for user-defined records
-        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${word}(?:\\s*\\(([^)]*)\\))?`, 'g');
+        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedWord}(?:\\s*\\(([^)]*)\\))?`, 'g');
         const recordMatch = recordRegex.exec(text);
         
         if (recordMatch) {
@@ -365,7 +366,6 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         }
 
         // Check for variables with type annotations (including generics)
-        const escapedWord = this.escapeRegex(word);
         const varRegex = new RegExp(`(?:var|let|const|final)\\s+${escapedWord}\\s*(?::\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?(?:\\s*=\\s*(.+))?`, 'g');
         const varMatch = varRegex.exec(text);
         
@@ -907,7 +907,8 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
      * Find function definition and return its return type
      */
     private findFunctionDefinition(funcName: string, lines: string[]): string | undefined {
-        const funcRegex = new RegExp(`def\\s+${funcName}\\s*\\([^)]*\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`);
+        const escapedFuncName = this.escapeRegex(funcName);
+        const funcRegex = new RegExp(`def\\s+${escapedFuncName}\\s*\\([^)]*\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_<>,\\s|]*))?\\s*:`);
         
         for (const line of lines) {
             const match = line.match(funcRegex);
@@ -1033,6 +1034,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
         word: string
     ): Promise<vscode.Hover | undefined> {
         const text = document.getText();
+        const escapedWord = this.escapeRegex(word);
         
         // Find import statements that include this symbol
         const importRegex = /import\s+([a-zA-Z._\/]+)\s*\{\s*([^}]+)\s*\}/g;
@@ -1052,7 +1054,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         const fileLines = fileText.split('\n');
                         
                         // Check for enum definition
-                        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${word}\\b`, 'g');
+                        const enumRegex = new RegExp(`(?:(?:public|private|protected|sealed)\\s+)*enum\\s+${escapedWord}\\b`, 'g');
                         const enumMatch = enumRegex.exec(fileText);
                         if (enumMatch) {
                             const lineNum = this.getLineNumber(fileText, enumMatch.index);
@@ -1065,7 +1067,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                             }
                             
                             // Extract enum values
-                            const enumBodyMatch = fileText.match(new RegExp(`enum\\s+${word}\\s+[^]*?end`, 'g'));
+                            const enumBodyMatch = fileText.match(new RegExp(`enum\\s+${escapedWord}\\s+[^]*?end`, 'g'));
                             if (enumBodyMatch) {
                                 const enumBody = enumBodyMatch[0];
                                 const valueMatches = enumBody.matchAll(/^\s+([A-Z_][A-Z0-9_]*)\s*(?:\(|$)/gm);
@@ -1080,7 +1082,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for class definition
-                        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${word}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
+                        const classRegex = new RegExp(`(?:(?:public|private|protected|sealed|abstract)\\s+)*class\\s+${escapedWord}(?:\\s+<\\s+([a-zA-Z][a-zA-Z0-9_]*))?(?:\\s+implements\\s+([^\\n{:]+))?`, 'g');
                         const classMatch = classRegex.exec(fileText);
                         if (classMatch) {
                             const parent = classMatch[1] ? ` < ${classMatch[1]}` : '';
@@ -1100,7 +1102,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for record definition
-                        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${word}(?:\\s*\\(([^)]*)\\))?`, 'g');
+                        const recordRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*record\\s+${escapedWord}(?:\\s*\\(([^)]*)\\))?`, 'g');
                         const recordMatch = recordRegex.exec(fileText);
                         if (recordMatch) {
                             const params = recordMatch[1] || '';
@@ -1119,7 +1121,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for interface definition
-                        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${word}`, 'g');
+                        const interfaceRegex = new RegExp(`(?:(?:public|private|protected)\\s+)*interface\\s+${escapedWord}`, 'g');
                         const interfaceMatch = interfaceRegex.exec(fileText);
                         if (interfaceMatch) {
                             const lineNum = this.getLineNumber(fileText, interfaceMatch.index);
@@ -1137,7 +1139,7 @@ export class PolyloftHoverProvider implements vscode.HoverProvider {
                         }
                         
                         // Check for function definition
-                        const funcRegex = new RegExp(`def\\s+${word}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_]*))?\\s*:`, 'g');
+                        const funcRegex = new RegExp(`def\\s+${escapedWord}\\s*\\(([^)]*)\\)(?:\\s*->\\s*([a-zA-Z][a-zA-Z0-9_]*))?\\s*:`, 'g');
                         const funcMatch = funcRegex.exec(fileText);
                         if (funcMatch) {
                             const params = funcMatch[1] || '';
